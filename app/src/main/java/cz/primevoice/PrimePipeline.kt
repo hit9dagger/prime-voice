@@ -49,6 +49,9 @@ class PrimePipeline(private val context: Context) {
         val pending = PendingStore(File(context.noBackupFilesDir, "pending"))
         val saved = withContext(Dispatchers.IO) { pending.readAll() }
         require(saved.size <= CAPACITY) { "QUEUE_CAPACITY" }
+        // Saved elapsedRealtime values may belong to an earlier boot. Keep original journal/UI
+        // metadata; map recovery playback to a new ordered clock instead of clamping every item.
+        val replayTimes = saved.mapIndexed { index, line -> line.id to (index * 2L to index * 2L + 1L) }.toMap()
         val permits = Semaphore(CAPACITY)
         repeat(saved.size) { permits.acquire() }
         val input = Channel<Block>(32)
@@ -97,7 +100,10 @@ class PrimePipeline(private val context: Context) {
                             output.synthesize(line.czech, line.voice.ifBlank { null }, wav)
                             PrimeState.ui.update { it.copy(synthesisMs = SystemClock.elapsedRealtime() - started) }
                             break
-                        } catch (e: CancellationException) { throw e }
+                        } catch (e: CancellationException) {
+                            currentCoroutineContext().ensureActive()
+                            delay(1000)
+                        }
                         catch (_: Exception) {
                             PrimeState.error("TTS_SYNTHESIS", "Syntéza selhala. Dokončený překlad zůstává ve frontě; zkouším znovu.")
                             delay(3000)
@@ -113,8 +119,9 @@ class PrimePipeline(private val context: Context) {
                                         try {
                                             playbackPermits.withPermit {
                                                 val now = SystemClock.elapsedRealtime()
-                                                val start = item.sourceStart.coerceAtMost(now)
-                                                val end = item.sourceEnd.coerceIn(start, now)
+                                                val recovery = replayTimes[item.id]
+                                                val start = recovery?.first ?: item.sourceStart
+                                                val end = recovery?.second ?: item.sourceEnd
                                                 val slot = planned ?: sync.schedule(item.speaker, start, end, now, output.durationMs(pending.audio(item))).also { planned = it }
                                                 delay((slot.startMs - SystemClock.elapsedRealtime()).coerceAtLeast(0))
                                                 waitForOutput()
@@ -123,7 +130,7 @@ class PrimePipeline(private val context: Context) {
                                                     PrimeState.ui.value.volume) {
                                                     PrimeState.lineStatus(item.id, "Přehrávám")
                                                     PrimeState.ui.update { it.copy(
-                                                        latencyMs = (SystemClock.elapsedRealtime() - item.sourceEnd).coerceAtLeast(0)
+                                                        latencyMs = if (replayTimes.containsKey(item.id)) 0L else (SystemClock.elapsedRealtime() - item.sourceEnd).coerceAtLeast(0)
                                                     ) }
                                                 }
                                                 sync.markFinished(item.speaker, SystemClock.elapsedRealtime())
@@ -132,7 +139,11 @@ class PrimePipeline(private val context: Context) {
                                             PrimeState.lineStatus(item.id, "Přehráno")
                                             permits.release(); backlog()
                                             break
-                                        } catch (e: CancellationException) { throw e }
+                                        } catch (e: CancellationException) {
+                                            currentCoroutineContext().ensureActive()
+                                            PrimeState.lineStatus(item.id, "Čeká na obnovení výstupu")
+                                            delay(1000)
+                                        }
                                         catch (_: Exception) {
                                             PrimeState.lineStatus(item.id, "Čeká na obnovení výstupu")
                                             PrimeState.error("AUDIO_PLAYBACK", "Přehrávání bylo přerušeno. Věta zůstává ve frontě a bude zopakována.")
