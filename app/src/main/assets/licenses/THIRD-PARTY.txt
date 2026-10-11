@@ -1,0 +1,26 @@
+PRIME VOICE third-party notices
+
+Vosk Android / vosk-api: Copyright Alpha Cephei Inc. and contributors.
+https://github.com/alphacep/vosk-api — Apache License 2.0; license included alongside this file.
+Vosk English and speaker models are downloaded separately from the official model catalogue.
+https://alphacephei.com/vosk/models/model-list.json
+
+JNA: https://github.com/java-native-access/jna
+Dual Apache-2.0 OR LGPL-2.1-or-later; this distribution relies on the Apache-2.0 option.
+Original JNA licensing notice is included alongside this file.
+
+AndroidX / Jetpack Compose, Kotlin and kotlinx.coroutines:
+https://developer.android.com/jetpack/androidx
+https://github.com/JetBrains/kotlin
+https://github.com/Kotlin/kotlinx.coroutines
+Apache-2.0. Original dependency metadata remains in the source dependency graph.
+
+Google ML Kit Translate is a proprietary free-of-charge Android SDK.
+https://developers.google.com/ml-kit/terms
+https://developers.google.com/ml-kit/language/translation/translation-terms
+The original Google Translate attribution badge is bundled unchanged.
+Badge source: https://docs.cloud.google.com/static/translate/images/google-translate-attribution.zip
+Entry png/white-regular.png; SHA256 f91bf90d865ad48415ac333a80fc548c182cc76be906d1b7f485b57eeae0f3f0.
+
+Sherpa/Piper/eSpeak are NOT linked or bundled in this APK. Optional external engine installation
+has its own licenses and distribution terms; see README. No claims of voice cloning.
