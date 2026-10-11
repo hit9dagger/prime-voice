@@ -6,6 +6,8 @@ import android.content.pm.ServiceInfo
 import android.media.*
 import android.os.*
 import androidx.core.app.NotificationCompat
+import cz.primevoice.audio.AudioInputException
+import cz.primevoice.audio.SpeechOutputException
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.update
 
@@ -91,6 +93,8 @@ class PrimeService : Service() {
         work = scope.launch {
             try { engine.run(intent?.data) }
             catch (e: CancellationException) { throw e }
+            catch (e: AudioInputException) { PrimeState.error(e.code, "Mikrofon není dostupný nebo jej přerušil Android. Po ukončení hovoru zkuste START znovu.") }
+            catch (e: SpeechOutputException) { PrimeState.error(e.code, e.message.orEmpty().substringAfter(": ")) }
             catch (_: OutOfMemoryError) { PrimeState.error("LOW_MEMORY", "Nedostatek paměti. Uložená fronta zůstává zachována.") }
             catch (_: Exception) { PrimeState.error("PIPELINE_START", "Překlad se zastavil. Zkontrolujte modely, český hlas a oprávnění; exportujte diagnostiku.") }
             finally { engine.release(); stopSelf() }

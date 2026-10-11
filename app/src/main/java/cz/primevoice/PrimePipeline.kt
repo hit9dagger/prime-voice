@@ -91,7 +91,16 @@ class PrimePipeline(private val context: Context) {
 
             // One bounded synthesis queue; each speaker has an independent playback lane.
             val synthesisJob = launch(Dispatchers.Default) {
-                for (line in translated) {
+                for (queuedLine in translated) {
+                    val requestedVoice = PrimeState.ui.value.speakerVoices[queuedLine.speaker] ?: queuedLine.voice
+                    val actualVoice = voices.firstOrNull { it.name == requestedVoice }?.name ?: voices.first().name
+                    val line = if (actualVoice == queuedLine.voice) queuedLine else queuedLine.copy(voice = actualVoice)
+                    if (line != queuedLine) {
+                        withContext(NonCancellable + Dispatchers.IO) { pending.save(line) }
+                        PrimeState.line(line)
+                        if (voices.none { it.name == requestedVoice })
+                            PrimeState.error("VOICE_FALLBACK", "Původní hlas není dostupný; uložená věta použije dostupný lokální český hlas.")
+                    }
                     val wav = pending.audio(line)
                     while (isActive) {
                         try {
@@ -114,10 +123,11 @@ class PrimePipeline(private val context: Context) {
                             launch(Dispatchers.IO) {
                                 for (item in channel) {
                                     var planned: SyncSlot? = null
+                                    var played = false
                                     while (isActive) {
                                         waitForOutput()
                                         try {
-                                            playbackPermits.withPermit {
+                                            if (!played) playbackPermits.withPermit {
                                                 val now = SystemClock.elapsedRealtime()
                                                 val recovery = replayTimes[item.id]
                                                 val start = recovery?.first ?: item.sourceStart
@@ -134,8 +144,9 @@ class PrimePipeline(private val context: Context) {
                                                     ) }
                                                 }
                                                 sync.markFinished(item.speaker, SystemClock.elapsedRealtime())
+                                                played = true
                                             }
-                                            withContext(Dispatchers.IO) { pending.complete(item) }
+                                            withContext(NonCancellable + Dispatchers.IO) { pending.complete(item) }
                                             PrimeState.lineStatus(item.id, "Přehráno")
                                             permits.release(); backlog()
                                             break
@@ -146,7 +157,8 @@ class PrimePipeline(private val context: Context) {
                                         }
                                         catch (_: Exception) {
                                             PrimeState.lineStatus(item.id, "Čeká na obnovení výstupu")
-                                            PrimeState.error("AUDIO_PLAYBACK", "Přehrávání bylo přerušeno. Věta zůstává ve frontě a bude zopakována.")
+                                            if (played) PrimeState.error("QUEUE_ACK", "Věta dohrála, ale zápis dokončení selhal. Opakuji zápis bez opakování hlasu.")
+                                            else PrimeState.error("AUDIO_PLAYBACK", "Přehrávání bylo přerušeno. Věta zůstává ve frontě a bude zopakována.")
                                             delay(2000)
                                         }
                                     }
@@ -179,7 +191,7 @@ class PrimePipeline(private val context: Context) {
                         val line = Line(UUID.randomUUID().toString(), speaker, utterance.start,
                             utterance.end, utterance.result.text, cs, selected)
                         // If disk is full retain in this bounded worker and stop accepting further input.
-                        while (isActive) {
+                        while (true) {
                             try {
                                 withContext(NonCancellable + Dispatchers.IO) { pending.save(line) }
                                 storageBlocked.set(false)
@@ -206,7 +218,7 @@ class PrimePipeline(private val context: Context) {
                 var streamOrigin = 0L
                 var previousGeneration = -1L
                 var segmentMs = 0L
-                var asrTime = 0L
+                var asrNanos = 0L
                 var lastEnd = 0L
                 var lastBlockEnd = 0L
                 suspend fun emit(result: RecognitionResult?, end: Long) {
@@ -219,8 +231,8 @@ class PrimePipeline(private val context: Context) {
                     backlog()
                     recognized.send(Utterance(result, start.coerceAtMost(end), speechEnd.coerceIn(start.coerceAtMost(end), end)))
                     lastEnd = speechEnd
-                    PrimeState.ui.update { it.copy(asrMs = asrTime) }
-                    asrTime = 0
+                    PrimeState.ui.update { it.copy(asrMs = asrNanos / 1_000_000L) }
+                    asrNanos = 0
                     segmentMs = 0
                 }
                 for (block in input) {
@@ -231,11 +243,12 @@ class PrimePipeline(private val context: Context) {
                         streamOrigin = block.start
                         lastEnd = block.start
                         segmentMs = 0
+                        asrNanos = 0
                         previousGeneration = block.generation
                     }
-                    val started = SystemClock.elapsedRealtime()
+                    val started = SystemClock.elapsedRealtimeNanos()
                     val result = recognizer.accept(block.samples, block.samples.size)
-                    asrTime += SystemClock.elapsedRealtime() - started
+                    asrNanos += SystemClock.elapsedRealtimeNanos() - started
                     segmentMs += block.end - block.start
                     emit(result, block.end)
                     if (segmentMs >= 10_000) {
@@ -251,15 +264,25 @@ class PrimePipeline(private val context: Context) {
 
             launch(Dispatchers.IO) {
                 var fileSamples = 0L
+                var lastInputType = -1
                 val fileOrigin = SystemClock.elapsedRealtime()
                 suspend fun receive(samples: ShortArray, count: Int) {
+                    if (file == null) {
+                        val inputType = microphone.routedDevice?.type ?: -1
+                        if (inputType != lastInputType) {
+                            lastInputType = inputType
+                            PrimeState.ui.update { it.copy(inputRouteType = inputType) }
+                            if (inputType != -1 && inputType != android.media.AudioDeviceInfo.TYPE_BUILTIN_MIC)
+                                PrimeState.error("MIC_ROUTE", "Android používá jiný vstup než mikrofon telefonu. Zkontrolujte připojená zařízení.")
+                        }
+                    }
                     val duration = count * 1000L / 16000
                     fileSamples += count
                     if (file != null) {
                         // Replay at the original sample clock so ASR and live mode use the same time base.
                         delay((fileOrigin + fileSamples * 1000L / 16000 - SystemClock.elapsedRealtime()).coerceAtLeast(0))
                     }
-                    val end = SystemClock.elapsedRealtime()
+                    val end = if (file == null) SystemClock.elapsedRealtime() else fileOrigin + fileSamples * 1000L / 16000
                     var sum = 0.0
                     for (i in 0 until count) sum += samples[i].toDouble() * samples[i]
                     val level = if (count == 0) 0f else (sqrt(sum / count) / 32768).toFloat()

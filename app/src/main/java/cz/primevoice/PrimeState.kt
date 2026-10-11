@@ -18,7 +18,7 @@ data class Line(
 data class PrimeUi(
     val active: Boolean = false, val status: String = "Připraveno",
     val error: String = "", val modelProgress: String = "", val modelsReady: Boolean = false,
-    val level: Float = 0f, val backlog: Int = 0, val missedBlocks: Long = 0,
+    val level: Float = 0f, val inputRouteType: Int = -1, val backlog: Int = 0, val missedBlocks: Long = 0,
     val asrMs: Long = 0, val translationMs: Long = 0, val synthesisMs: Long = 0,
     val latencyMs: Long = 0, val engine: String = "", val route: String = "",
     val voices: List<Pair<String, String>> = emptyList(), val lines: List<Line> = emptyList(),
@@ -49,7 +49,7 @@ object PrimeState {
         val pm = context.getSystemService(PowerManager::class.java)
         val audio = context.getSystemService(AudioManager::class.java)
         val devices = JSONArray()
-        audio.getDevices(AudioManager.GET_DEVICES_ALL).forEach {
+        (audio.getDevices(AudioManager.GET_DEVICES_INPUTS) + audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS)).distinctBy { it.id }.forEach {
             devices.put(JSONObject().put("type", it.type).put("input", it.isSource).put("output", it.isSink))
         }
         val events = synchronized(errors) {
@@ -59,7 +59,7 @@ object PrimeState {
             .put("schema", 1).put("app", "PRIME VOICE").put("sdk", Build.VERSION.SDK_INT)
             .put("elapsedMs", SystemClock.elapsedRealtime()).put("active", state.active)
             .put("recordAudioGranted", context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED)
-            .put("inputRms", state.level).put("modelsReady", state.modelsReady)
+            .put("actualInputDeviceType", state.inputRouteType).put("inputRms", state.level).put("modelsReady", state.modelsReady)
             .put("queueSize", state.backlog).put("missedInputBlocks", state.missedBlocks)
             .put("asrMs", state.asrMs).put("translationMs", state.translationMs)
             .put("synthesisMs", state.synthesisMs).put("toPlaybackMs", state.latencyMs)

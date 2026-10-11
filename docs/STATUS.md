@@ -2,7 +2,10 @@
 
 Aktualizováno 2026-10-11.
 
-Výchozí revize 79c5028 obsahovala pouze README. Nyní se ve větvi codex/prime-sync skládá skutečný Android zdrojový projekt.
+Výchozí revize 79c5028 obsahovala pouze README. Ve větvi codex/prime-sync je skutečný Android zdrojový projekt. První běh Actions 38132767374 (revize 7402cb7)
+zkompiloval Kotlin, provedl testDebugUnitTest bez chyby a vytvořil debug APK na runneru.
+Celý běh však selhal na jedné chybě lint WrongConstant v diagnostice audio zařízení; APK se proto nenahrálo.
+Oprava a opravy obnovy fronty se ověřují dalším během. Za úspěšný distribuční build tento první běh nepovažujeme.
 
 | Část | Zdrojový kód | Automatické ověření | Fyzický POCO |
 |---|---|---|---|
