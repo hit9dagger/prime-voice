@@ -2,7 +2,9 @@
 
 Nativní testovací Android aplikace: mikrofon → Vosk (angličtina) → lokální ML Kit EN–CS → český Android TTS engine → sluchátka. Kotlin, Compose, Android 8+; první cílový telefon POCO F7 Ultra / Android 16 / ARM64.
 
-**Stav:** zdrojový kód se právě integruje. Úspěšné sestavení ani test na telefonu zatím nejsou potvrzené. Původní repozitář obsahoval pouze tento README; neexistovala starší aplikace ani APK.
+**Stav 11. 10. 2026:** první testovací APK je skutečně sestavené. [Stáhnout APK pro ARM64 (39 MB)](https://github.com/hit9dagger/prime-voice/actions/runs/38133658912/artifacts/11700022352) · [úspěšný build](https://github.com/hit9dagger/prime-voice/actions/runs/38133658912) · [celý Android Studio projekt ZIP](https://github.com/hit9dagger/prime-voice/actions/runs/38133658912/artifacts/11700107032).
+
+Prošly jednotkové testy, Kotlin compile, Android lint, podpis APK i ELF/ZIP zarovnání na 16 KiB. **Fyzický POCO ani celý hlasový řetězec na telefonu ještě otestované nejsou.** Nejde o dokončené oddělování více současných mluvčích; omezení jsou níže. Původní repozitář obsahoval jen README.
 
 ## Instalace pouze z telefonu
 
