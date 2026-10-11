@@ -16,8 +16,10 @@ class PrimeService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private lateinit var audio: AudioManager
     private var focus: AudioFocusRequest? = null
+    private var focusGranted = false
+    private var routeAvailable = false
     private val noisy = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) { pipeline?.interrupt() }
+        override fun onReceive(context: Context?, intent: Intent?) { routeAvailable = false; updateGate() }
     }
     private val devices = object : AudioDeviceCallback() {
         override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>?) { updateRoute() }
@@ -40,8 +42,12 @@ class PrimeService : Service() {
             AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_USB_HEADSET
         ) }
         PrimeState.ui.update { it.copy(route = if (privateOutputs.isEmpty()) "Sluchátka nejsou připojena" else "Sluchátka dostupná; směrování ověřuje přehrávač") }
-        if (privateOutputs.isEmpty()) pipeline?.interrupt()
-        else if (audio.mode == AudioManager.MODE_NORMAL) pipeline?.resume()
+        routeAvailable = privateOutputs.isNotEmpty()
+        updateGate()
+    }
+    private fun updateGate() {
+        if (focusGranted && routeAvailable && audio.mode == AudioManager.MODE_NORMAL) pipeline?.resume()
+        else pipeline?.interrupt()
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == "STOP") { stopSelf(); return START_NOT_STICKY }
@@ -67,10 +73,12 @@ class PrimeService : Service() {
             .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
             .setOnAudioFocusChangeListener { change ->
-                if (change == AudioManager.AUDIOFOCUS_GAIN) pipeline?.resume() else pipeline?.interrupt()
+                focusGranted = change == AudioManager.AUDIOFOCUS_GAIN
+                updateGate()
             }.setWillPauseWhenDucked(true).build()
         focus = request
-        if (audio.requestAudioFocus(request) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+        focusGranted = audio.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        if (!focusGranted) {
             PrimeState.error("AUDIO_FOCUS", "Zvuk nyní používá hovor nebo jiná aplikace. Zkuste START později.")
             stopSelf()
             return START_NOT_STICKY

@@ -10,11 +10,22 @@ import java.io.File
  * Capacity is reserved BEFORE translation; filesystem failures stop admission.
  */
 class PendingStore(private val directory: File) {
-    init { check(directory.exists() || directory.mkdirs()) }
+    init {
+        check(directory.exists() || directory.mkdirs())
+        // Never retain generated speech that no longer has a queue journal entry.
+        directory.listFiles().orEmpty().filter { it.extension == "wav" }.forEach { wav ->
+            val journal = File(directory, wav.nameWithoutExtension + ".json")
+            if (!journal.exists() && !File(journal.path + ".bak").exists() && !wav.delete()) {
+                PrimeState.error("QUEUE_CLEANUP", "Nepodařilo se odstranit zbytkový zvuk fronty.")
+            }
+        }
+    }
     @Synchronized fun readAll(): List<Line> = directory.listFiles().orEmpty()
         .filter { it.extension == "json" }
         .map { file ->
+            check(file.length() <= 100_000) { "QUEUE_CORRUPT" }
             val j = JSONObject(AtomicFile(file).openRead().bufferedReader().use { it.readText() })
+            require(j.getString("id").matches(Regex("[0-9a-fA-F-]{36}"))) { "QUEUE_CORRUPT" }
             Line(j.getString("id"), j.getString("speaker"), j.getLong("sourceStart"),
                 j.getLong("sourceEnd"), j.getString("english"), j.getString("czech"),
                 j.optString("voice"), "Čeká na přehrání")
@@ -31,8 +42,9 @@ class PendingStore(private val directory: File) {
     }
     fun audio(line: Line) = File(directory, line.id + ".wav")
     @Synchronized fun complete(line: Line) {
+        val wav = audio(line)
+        check(!wav.exists() || wav.delete()) { "QUEUE_AUDIO_DELETE" }
         check(File(directory, line.id + ".json").delete()) { "QUEUE_DELETE" }
-        audio(line).delete()
     }
     @Synchronized fun clear() {
         directory.listFiles().orEmpty().forEach { check(it.delete()) }

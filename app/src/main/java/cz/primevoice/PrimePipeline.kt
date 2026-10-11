@@ -13,6 +13,7 @@ import cz.primevoice.engine.RecognitionResult
 import cz.primevoice.engine.Translation
 import cz.primevoice.sync.SpeakerRegistry
 import cz.primevoice.sync.SyncClock
+import cz.primevoice.sync.SyncSlot
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.update
@@ -33,11 +34,10 @@ class PrimePipeline(private val context: Context) {
     private val translation = Translation()
     private var recognition: Recognition? = null
     private val generation = AtomicLong()
-    private val acceptInput = AtomicBoolean(true)
+    private val storageBlocked = AtomicBoolean(false)
     private val outputAllowed = AtomicBoolean(true)
     fun interrupt() {
         outputAllowed.set(false)
-        acceptInput.set(false)
         generation.incrementAndGet()
         output.stopAll()
         PrimeState.error("AUDIO_INTERRUPTED", "Hovor nebo změna zvukového výstupu. Fronta zůstává uložena.")
@@ -61,7 +61,7 @@ class PrimePipeline(private val context: Context) {
         val session = UUID.randomUUID().toString().take(8)
         var nextVoice = 0
         fun backlog() = PrimeState.ui.update { it.copy(backlog = CAPACITY - permits.availablePermits) }
-        fun canAdmit(): Boolean = outputAllowed.get() && permits.availablePermits > 0 && pending.hasSpace()
+        fun canAdmit(): Boolean = outputAllowed.get() && !storageBlocked.get() && permits.availablePermits > 0 && pending.hasSpace()
         suspend fun waitForOutput() {
             while (!outputAllowed.get() || !hasHeadphones()) delay(250)
         }
@@ -87,7 +87,7 @@ class PrimePipeline(private val context: Context) {
             backlog()
 
             // One bounded synthesis queue; each speaker has an independent playback lane.
-            launch(Dispatchers.Default) {
+            val synthesisJob = launch(Dispatchers.Default) {
                 for (line in translated) {
                     val wav = pending.audio(line)
                     while (isActive) {
@@ -107,6 +107,7 @@ class PrimePipeline(private val context: Context) {
                         Channel<Line>(CAPACITY).also { channel ->
                             launch(Dispatchers.IO) {
                                 for (item in channel) {
+                                    var planned: SyncSlot? = null
                                     while (isActive) {
                                         waitForOutput()
                                         try {
@@ -114,7 +115,7 @@ class PrimePipeline(private val context: Context) {
                                                 val now = SystemClock.elapsedRealtime()
                                                 val start = item.sourceStart.coerceAtMost(now)
                                                 val end = item.sourceEnd.coerceIn(start, now)
-                                                val slot = sync.schedule(item.speaker, start, end, now, output.durationMs(pending.audio(item)))
+                                                val slot = planned ?: sync.schedule(item.speaker, start, end, now, output.durationMs(pending.audio(item))).also { planned = it }
                                                 delay((slot.startMs - SystemClock.elapsedRealtime()).coerceAtLeast(0))
                                                 waitForOutput()
                                                 output.play(pending.audio(item),
@@ -144,6 +145,7 @@ class PrimePipeline(private val context: Context) {
                     }
                     lane.send(line)
                 }
+                lanes.values.forEach { it.close() }
             }
 
             launch(Dispatchers.Default) {
@@ -167,10 +169,14 @@ class PrimePipeline(private val context: Context) {
                             utterance.end, utterance.result.text, cs, selected)
                         // If disk is full retain in this bounded worker and stop accepting further input.
                         while (isActive) {
-                            try { withContext(Dispatchers.IO) { pending.save(line) }; break }
+                            try {
+                                withContext(NonCancellable + Dispatchers.IO) { pending.save(line) }
+                                storageBlocked.set(false)
+                                break
+                            }
                             catch (e: CancellationException) { throw e }
                             catch (_: Exception) {
-                                acceptInput.set(false)
+                                storageBlocked.set(true)
                                 PrimeState.error("QUEUE_WRITE", "Nelze uložit hotový překlad. Uvolněte místo; příjem je pozastaven.")
                                 delay(2000)
                             }
@@ -182,6 +188,7 @@ class PrimePipeline(private val context: Context) {
                     catch (_: Exception) { PrimeState.error("TRANSLATION_FAILED", "Překlad této anglické promluvy selhal.") }
                     finally { if (!retained) permits.release(); backlog() }
                 }
+                translated.close()
             }
 
             launch(Dispatchers.Default) {
@@ -190,6 +197,7 @@ class PrimePipeline(private val context: Context) {
                 var segmentMs = 0L
                 var asrTime = 0L
                 var lastEnd = 0L
+                var lastBlockEnd = 0L
                 suspend fun emit(result: RecognitionResult?, end: Long) {
                     if (result == null || result.text.isBlank()) return
                     val start = result.sourceStartSeconds?.let { streamOrigin + (it * 1000).toLong() }
@@ -205,6 +213,7 @@ class PrimePipeline(private val context: Context) {
                     segmentMs = 0
                 }
                 for (block in input) {
+                    lastBlockEnd = block.end
                     val recognizer = checkNotNull(recognition)
                     if (block.generation != previousGeneration) {
                         recognizer.reset()
@@ -225,7 +234,7 @@ class PrimePipeline(private val context: Context) {
                         segmentMs = 0
                     }
                 }
-                emit(recognition?.finish(), SystemClock.elapsedRealtime())
+                emit(recognition?.finish(), lastBlockEnd)
                 recognized.close()
             }
 
@@ -234,14 +243,16 @@ class PrimePipeline(private val context: Context) {
                 val fileOrigin = SystemClock.elapsedRealtime()
                 suspend fun receive(samples: ShortArray, count: Int) {
                     val duration = count * 1000L / 16000
-                    val end = if (file == null) SystemClock.elapsedRealtime()
-                        else fileOrigin + (fileSamples + count) * 1000L / 16000
                     fileSamples += count
+                    if (file != null) {
+                        // Replay at the original sample clock so ASR and live mode use the same time base.
+                        delay((fileOrigin + fileSamples * 1000L / 16000 - SystemClock.elapsedRealtime()).coerceAtLeast(0))
+                    }
+                    val end = SystemClock.elapsedRealtime()
                     var sum = 0.0
                     for (i in 0 until count) sum += samples[i].toDouble() * samples[i]
                     val level = if (count == 0) 0f else (sqrt(sum / count) / 32768).toFloat()
                     val allowed = canAdmit()
-                    acceptInput.set(allowed)
                     PrimeState.ui.update { it.copy(level = level, status =
                         if (allowed) "Poslouchám" else "Příjem pozastaven — dopřehrávám překlady") }
                     if (file != null) {
@@ -258,7 +269,7 @@ class PrimePipeline(private val context: Context) {
                         ?: error("WAV_OPEN")
                 } finally { input.close() }
             }
-            awaitCancellation()
+            if (file == null) awaitCancellation() else synthesisJob.join()
         } finally {
             microphone.stop()
             output.stopAll()
