@@ -79,7 +79,9 @@ class CameraPipelineTest {
 
     @Test fun liveCameraXFeedsAnalyzerAndStopsWithoutModelsBeingRequired() = runBlocking {
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        automation.executeShellCommand("pm grant cz.primevoice android.permission.CAMERA").close()
+        automation.executeShellCommand("pm grant cz.primevoice android.permission.CAMERA").use { descriptor ->
+            java.io.FileInputStream(descriptor.fileDescriptor).use { it.readBytes() }
+        }
         var vm: PrimeVoiceViewModel? = null
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity {

@@ -12,8 +12,6 @@ cat model-preparation.txt
 grep -q 'OK (1 test)' model-preparation.txt
 adb shell svc wifi disable
 adb shell svc data disable
-adb shell settings put global airplane_mode_on 1
-adb shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true
 adb shell am instrument -w -r -e notClass cz.primevoice.ModelPreparationTest cz.primevoice.test/androidx.test.runner.AndroidJUnitRunner > emulator-results.txt
 cat emulator-results.txt
 grep -q 'OK (8 tests)' emulator-results.txt

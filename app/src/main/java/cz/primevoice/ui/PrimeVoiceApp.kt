@@ -343,7 +343,7 @@ import java.util.Locale
                     Text("Poslední přeskočení: ${camera.skipReason.ifBlank { "žádné" }}", color = Muted)
                     Text("SUROVÝ TEXT: ${camera.rawText.ifBlank { "(zatím žádný text)" }}")
                     Text("PŘEKLAD: ${if (queue.items.any { it.stage == Stage.FAILED && it.czech.isBlank() }) "chyba – fronta čeká" else model.message}", color = Muted)
-                    Text("TTS: ${tts.error ?: if (tts.speaking) "přehrává" else if (tts.selected.isNotBlank()) "připraveno" else "chybí český hlas"}", color = Muted)
+                    Text("TTS: ${queue.items.firstOrNull { it.stage == Stage.FAILED && it.czech.isNotBlank() }?.error ?: tts.error ?: if (tts.speaking) "přehrává" else if (tts.selected.isNotBlank()) "připraveno" else "chybí český hlas"}", color = Muted)
                     Text("OCR ${diagnostic.ocrMs} ms · překlad ${diagnostic.translationMs} ms · příprava TTS ${diagnostic.ttsPreparationMs} ms", color = Muted)
                     Text("Zachyceno ${diagnostic.captured} · duplicity ${diagnostic.duplicates + queue.duplicates} · přehráno ${queue.spoken} · přeskočeno ${queue.skipped}", color = Muted)
                     Text("Analýzy ${diagnostic.ocrCount} · vynechané analýzy ${diagnostic.skippedFrames} · jistota ${(diagnostic.confidence * 100).roundToInt()} % (odhad)", color = Muted)
