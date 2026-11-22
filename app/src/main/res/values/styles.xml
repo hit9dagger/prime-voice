@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.PrimeVoice" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#0B1017</item>
+        <item name="android:colorAccent">#B9F56A</item>
+    </style>
+</resources>

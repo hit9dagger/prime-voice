@@ -1,102 +1,35 @@
 name: Android APK
 on:
-  pull_request:
   push:
-    branches: [main, codex/prime-sync]
+  pull_request:
   workflow_dispatch:
 permissions:
-  contents: write
-concurrency:
-  group: android-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  contents: read
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - name: Java 17
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
-      - name: Android SDK
-        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install SDK
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Tests, lint and installable debug APK
+        run: ./gradlew :core:test :app:lintDebug :app:assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
         with:
-          packages: 'platform-tools platforms;android-36 build-tools;35.0.0'
-          log-accepted-android-sdk-licenses: false
-      - name: Verify official Gradle wrapper
-        run: |
-          printf '%s  %s\n' '2db75c40782f5e8ba1fc278a5574bab070adccb2d21ca5a6e5ed840888448046' 'gradle/wrapper/gradle-wrapper.jar' | sha256sum --check
-      - name: Gradle
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6
-        with:
-          cache-provider: basic
-          cache-disabled: true
-          dependency-graph: disabled
-          build-scan-publish: false
-      - name: Google Translate attribution asset
-        run: python3 scripts/prepare_attribution.py
-      - name: Unit tests, Android lint and APK
-        run: bash ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
-      - name: Verify native libraries and APK signature
-        run: |
-          python3 scripts/check_native_alignment.py app/build/outputs/apk/debug/app-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 -v 4 app/build/outputs/apk/debug/app-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
-      - name: Prepare downloads
-        run: |
-          mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/PRIME-VOICE-debug-arm64.apk
-          git archive --format=zip --output=dist/PRIME-VOICE-source.zip HEAD
-          zip -q dist/PRIME-VOICE-source.zip app/src/main/res/drawable/google_translate_attribution.png
-          sha256sum dist/PRIME-VOICE-debug-arm64.apk > dist/SHA256SUMS.txt
-          git rev-parse HEAD > dist/SOURCE-COMMIT.txt
-      - name: APK for Android phone
-        id: apk
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          path: dist/PRIME-VOICE-debug-arm64.apk
-          archive: false
-          retention-days: 7
+          name: PRIME-VOICE-debug-apk
+          path: app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
           if-no-files-found: error
-      - name: Complete Android Studio source
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          path: dist/PRIME-VOICE-source.zip
-          archive: false
-          retention-days: 7
-          if-no-files-found: error
-      - name: Test and lint reports
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: checks-and-reports
+          name: test-and-lint-reports
           path: |
-            app/build/reports/
-            app/build/test-results/
-            dist/SHA256SUMS.txt
-            dist/SOURCE-COMMIT.txt
-          retention-days: 7
-          if-no-files-found: warn
-      - name: Phone download link
-        if: success()
-        env:
-          APK_URL: ${{ steps.apk.outputs.artifact-url }}
-        run: |
-          printf '### PRIME VOICE APK\n\n[Stáhnout instalační APK](%s)\n\nPřihlaste se ke GitHubu. Soubor je dostupný 7 dní. Podpis je vývojový; další sestavení může vyžadovat odinstalaci předchozí verze.\n' "$APK_URL" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Publish direct APK download on GitHub Releases
-        if: success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG="camera-test-latest"
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --title "PRIME VOICE CAMERA – testovací APK" --notes "Testovací sestavení pro Android ARM64. Kamera, OCR a český TTS dosud nebyly ověřeny na fyzickém telefonu." --prerelease --target "$GITHUB_SHA"
-          fi
-          gh release upload "$TAG" dist/PRIME-VOICE-debug-arm64.apk --clobber
-          printf '\n### Přímé stažení bez GitHub Actions artefaktů\n\nhttps://github.com/${{ github.repository }}/releases/download/camera-test-latest/PRIME-VOICE-debug-arm64.apk\n' >> "$GITHUB_STEP_SUMMARY"
+            core/build/reports/tests/test/
+            app/build/reports/lint-results-debug.html

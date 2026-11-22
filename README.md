@@ -1,79 +1,70 @@
 # PRIME VOICE
 
-Nativní testovací Android aplikace: mikrofon → Vosk (angličtina) → lokální ML Kit EN–CS → český Android TTS engine → sluchátka. Kotlin, Compose, Android 8+; první cílový telefon POCO F7 Ultra / Android 16 / ARM64.
+Nový samostatný nativní Android projekt. Kamerou čte celé bloky anglických titulků z televize, lokálně je překládá do češtiny a přehrává přes systémový Android Text-to-Speech. Žádné propojení s PS5, účet, API klíč ani předplatné.
 
-**Stav 11. 10. 2026:** první testovací APK je skutečně sestavené. [Stáhnout APK pro ARM64 (39 MB)](https://github.com/hit9dagger/prime-voice/actions/runs/38133658912/artifacts/11700022352) · [úspěšný build](https://github.com/hit9dagger/prime-voice/actions/runs/38133658912) · [celý Android Studio projekt ZIP](https://github.com/hit9dagger/prime-voice/actions/runs/38133658912/artifacts/11700107032).
+**Cílový systém:** Android 16 / API 36; minimum Android 12 / API 31. Kotlin, Compose, CameraX, ML Kit, Coroutines a StateFlow. Neobsahuje žádný webový obal ani simulovaný překlad.
 
-Prošly jednotkové testy, Kotlin compile, Android lint, podpis APK i ELF/ZIP zarovnání na 16 KiB. **Fyzický POCO ani celý hlasový řetězec na telefonu ještě otestované nejsou.** Nejde o dokončené oddělování více současných mluvčích; omezení jsou níže. Původní repozitář obsahoval jen README.
+## První spuštění
 
-## Instalace pouze z telefonu
+1. Nainstalujte `PRIME-VOICE-1.0.0-debug.apk`. Jde o podepsané vývojové APK pro přímou instalaci, nikoli produkční distribuci v Google Play.
+2. V aplikaci stáhněte překladový model. Přepínač Wi-Fi je ve výchozím stavu zapnutý; přibližně 30 MB na jazykový model, skutečný objem může poskytovatel změnit. Pro první stažení je potřeba internet.
+3. V systému nainstalujte český **offline** TTS hlas. Aplikace automaticky projde nainstalované TTS enginy a nabídne jejich skutečné dostupné české offline hlasy. Po instalaci dalšího hlasu zvolte „Obnovit nainstalované hlasy“.
+4. Na televizi zapněte anglické titulky. Telefon stabilně umístěte před televizor a stiskněte **SPUSTIT PŘEKLAD**. Kamera si vyžádá oprávnění.
+5. Pomocí **Vybrat oblast** tažením označte všechny řádky titulků a stiskněte **Hotovo**. Výřez se uloží. Během výběru probíhá náhled, OCR je pozastavené. Klepnutí do náhledu mimo výběr zaostří.
+6. Hlas, jeho ukázku a počáteční zpoždění nastavujte při zastaveném překladu. Rychlost a výška se použijí od další promluvy. Zpoždění 0–10 s je jednorázová rezerva od připravení prvního překladu, nikoliv opakované čekání po každé větě.
+7. Bluetooth sluchátka/reproduktor připojte standardně v Androidu a zvolte mediální výstup. Hra zůstává slyšet z televize.
 
-1. Otevřete [GitHub Actions](https://github.com/hit9dagger/prime-voice/actions), přihlaste se ke GitHubu a otevřete poslední **úspěšný** běh Android workflow pro větev `codex/prime-sync` (po sloučení `main`).
-2. Dole v **Artifacts** stáhněte soubor APK. Pokud telefon stáhne ZIP, rozbalte jej v aplikaci Soubory. APK nebude existovat, pokud sestavení skončilo chybou.
-3. Otevřete APK a povolte instalaci z použitého prohlížeče/správce souborů. Jde o testovací debug podpis. Není třeba účet v aplikaci ani placené API.
-4. Pro neuronovou češtinu nainstalujte samostatný [Sherpa / Piper Jirka ARM64 TTS engine 1.13.8](https://huggingface.co/csukuangfj2/sherpa-onnx-apk/resolve/main/tts-engine-new/1.13.8/sherpa-onnx-1.13.8-arm64-v8a-ces-tts-engine-vits-piper-cs_CZ-jirka-medium.apk). Odkaz pochází z [oficiální dokumentace](https://k2-fsa.github.io/sherpa/onnx/tts/all/Czech/vits-piper-cs_CZ-jirka-medium.html). Engine obsahuje model; nevyžaduje server. Instalaci tohoto cizího APK na POCO jsme zatím neotestovali.
-5. Spusťte PRIME VOICE, stáhněte modely (ASR přibližně 42 MB, překlad přibližně 30 MB), připojte sluchátka, povolte mikrofon a stiskněte START.
-6. Aplikace upřednostní nainstalovaný Sherpa engine. Jinak použije dostupný **lokální český hlas** systémového enginu. Systémový hlas není automaticky označován za neuronový. Chybějící hlas lze doplnit v systémovém nastavení převodu textu na řeč.
-7. Zkuste nejprve jednu krátkou anglickou větu bez hudby. Pak otestujte režim letadlo se znovu zapnutým Bluetooth. Při potížích exportujte v aplikaci diagnostiku JSON.
+## Jirka a další hlasy
 
-Při dalším debug buildu může vzniknout jiný testovací podpis: Android pak vyžaduje odinstalaci předchozího buildu, čímž odstraní jeho modely a frontu. Stabilní distribuční podepisování zatím není nastaveno. Artefakty Actions mají omezenou dobu uchování.
+Jirka není vymyšlený název: existuje český Piper model `cs_CZ-jirka-medium`. Jeho modelová karta uvádí dataset CC0. Projekt sherpa-onnx zveřejňuje skutečné Android **TTS engine** APK, také pro tento model.
 
-## Co zdrojový kód implementuje
+- [Oficiální seznam engine APK](https://k2-fsa.github.io/sherpa/onnx/tts/apk-engine.html): pro POCO F7 Ultra vyberte `arm64-v8a` + `cs_CZ-jirka-medium`, nikoli samostatnou ukázkovou TTS aplikaci.
+- [Karta modelu Jirka](https://huggingface.co/rhasspy/piper-voices/blob/main/cs/cs_CZ/jirka/medium/MODEL_CARD).
+- [Zdrojový kód TTS enginu](https://github.com/k2-fsa/sherpa-onnx/tree/master/android/SherpaOnnxTtsEngine).
 
-- AudioRecord 16 kHz / mono / PCM16, upřednostnění mikrofonu telefonu, omezenou vstupní frontu a explicitní evidenci nezpracovaných bloků.
-- Skutečnou lokální Vosk inferenci a její detekci konce promluvy. Dlouhé úseky se rozdělují. Nejde o model oddělování hlasu od hudby.
-- Skutečný lokální překlad ML Kit EN → CS po stažení modelu.
-- Syntézu přes Android TTS do WAV a samostatné AudioTrack stopy. Ověřuje se lokální český hlas a dostupnost sluchátek.
-- PRIME SYNC: společný monotónní čas, adaptivní plánování a samostatné FIFO stopy mluvčích. Různé stopy mohou hrát současně, stejná stopa dokončí předchozí větu. Nejvýše čtyři současné výstupy, ostatní čekají.
-- Maximální automatickou rychlost 1,35× s výškou 1,0 přes Android PlaybackParams.
-- Omezenou soukromou diskovou frontu **24 dokončených překladů**. Při zahlcení se pozastaví příjem nové řeči; již přeložené věty se kvůli novým nemažou.
-- Experimentální podobnost mluvčích pomocí Vosk speaker embeddings, stabilní ID během relace, konzervativní neznámý mluvčí a ruční změnu přiřazeného dostupného hlasu.
-- Foreground service, trvalou notifikaci se STOP, export technické diagnostiky a test ze skutečného WAV souboru přes stejnou pipeline.
+Instalace externího enginu je volitelná a ruční. PRIME VOICE jej nestahuje ani neinstaluje skrytě. Po instalaci obnovte hlasy a přehrajte ukázku. Název, který engine vystavuje Androidu, se může lišit od názvu Piper modelu. Nelze slíbit, že Google Speech Services nabízí hlas pojmenovaný Jirka. Android Voice nemá standardní údaj o pohlaví; mužský/ženský hlas aplikace neodhaduje podle názvu a nepřiřazuje postavám. Všechny offline české hlasy daných enginů jsou dostupné k volbě.
 
-Samotná existence kódu nepotvrzuje správné chování na telefonu. Automatické testy jsou popsány níže a výsledky se evidují v `docs/STATUS.md`.
+## Co aplikace skutečně dělá
 
-## Co dokončeno není
+- CameraX ImageAnalysis s KEEP_ONLY_LATEST; luminanční výřez odpovídá náhledu sdíleným ViewPortem, včetně otočení obrazu. OCR rozpoznává celý výřez a řadí řádky shora dolů a zleva doprava.
+- Detektor stability čeká na několik shodných pozorování, sleduje interpunkci, dopisování, změnu a zmizení titulku. Nejisté nedokončené bloky může spojit přes další obrazovku, s omezenou dobou čekání.
+- Offline Google ML Kit Translation překládá celý dokončený blok. Předzpracování sjednotí mezery, některé hovorové anglické tvary a chrání uživatelem zadaná jména.
+- Jediný přehrávací worker čeká na `UtteranceProgressListener.onDone`. Používá výhradně `QUEUE_ADD`. Nová věta nikdy nevyvolá `stop()` ani `QUEUE_FLUSH`.
+- Fronta zachovává pořadí i při opačném pořadí dokončení překladů. Má limit 40 přijatých vět a malé přechodné zadržení dokončených OCR bloků. Při zaplnění zastaví další analýzu a zobrazí upozornění; během pauzy mohou uniknout nové titulky z televize. Přijaté věty bez pokynu nemaže.
+- Dva překladové workery mají timeout a jedno automatické opakování. Po přetrvávající chybě zůstává věta ve frontě a blokuje pozdější věty. Uživatel zvolí opakování nebo přeskočení. TTS má samostatný watchdog.
+- Pomocný odposlech používá pouze `createOnDeviceSpeechRecognizer`. Nevrací se ke cloudovému rozpoznávání. Bez offline angličtiny zůstává plně dostupná kamera. Koncové výsledky s dostatečnou jistotou a časovou shodou mohou opravit zjevně poškozené OCR slovo nebo ojedinělou mezeru mezi shodnými slovy; mikrofon nikdy nevytváří vlastní položku fronty.
+- Při českém TTS se odposlech vypne, následně krátce počká na dozvuk. Nepředstírá se hardwarové potlačení ozvěny, které systémový SpeechRecognizer neposkytuje aplikaci pod vlastní kontrolou.
+- OCR pracuje přibližně 1–4,5× za sekundu podle změn obrazu a teploty, ne na každém snímku. Při kritické teplotě se relace pozastaví, při silném zahřátí se odposlech vypne.
+- Ztráta externího zvukového zařízení pozastaví začínání dalších vět. Rozehraná věta se nechá dokončit a může po systémovém přesměrování doznít z telefonu. Pro pokračování uživatel potvrdí zvuk.
 
-- **Oddělování ani spolehlivá detekce současně mluvících lidí.** Monofonní Vosk může při překryvu ztratit slova nebo spojit promluvy. Nesmí se to vydávat za diarizaci jednotlivých souběžných zdrojů. Takový vstup zatím není podporovaným testem přesnosti.
-- **Tři odlišné neuronové české hlasy nejsou přibaleny.** Ověřený Piper Jirka má jeden hlas. Pokud engine nabízí jen jeden lokální český hlas, Speaker ID budou rozlišená, ale hlas bude stejný. Změna tempa není klonování hlasu.
-- Spolehlivá identita krátkých, křičených nebo překrytých replik; Vosk vrací jeden embedding celého segmentu. Výchozí nastavení potřebuje přibližně čtyři sekundy řeči.
-- Změna chybných hlasových profilů jejich slučováním, skutečné voice cloning a cross-lingual voice conversion.
-- Ověření latence, kvality, teploty, Android 16, Bluetooth a zamknuté obrazovky na fyzickém POCO. Žádná konkrétní rychlost není garantována.
-- Zatím není ověřena celá inference v automatickém Android integračním testu. JVM testy časování a parserů nepředstavují test AI modelu.
+## Přesné limity
 
-## PRIME SYNC a limity záruk
+ML Kit je oficiální bezplatný lokální základ, **nikoli konverzační jazykový model**. Nedokáže zaručit přirozený slang, správné rodové vztahy ani význam každé herní repliky. Paměť posledních osmi dialogů je lokální a omezená; nejde o kontextový parametr ML Kit. Experimentální generativní překladač není součástí této verze. Podrobné srovnání kandidátů je v [TECHNOLOGY.md](docs/TECHNOLOGY.md).
 
-Dokončený překlad se uloží před zařazením do syntézy. Přehrání jej odstraní z fronty. Nový překlad nesmí přerušit starý. Při telefonním hovoru, odpojení sluchátek, STOP nebo restartu může být nedokončená věta přehrána znovu od začátku; nelze zaručit nepřerušený zvuk při zásahu Androidu.
+Dokončení titulků je heuristika: dlouhá pauza uprostřed dopisování může vypadat jako konec a velmi krátký titulek zachycený jen jednou se zahodí jako nejistý. Opakování identického textu je potlačeno 18 s; zůstávající titulek se neopakuje ani po této době, nová skutečná promluva po zmizení a odstupu opět ano. Identická věta zopakovaná různými postavami rychleji než 18 s může být potlačena.
 
-Nelze současně garantovat konečnou paměť, nízké zpoždění a zpracování nekonečného toku rychlejšího než telefon. Po naplnění rezerv aplikace **přestane přijímat další řeč** a dopřehrává frontu. Nové věty v tomto období nejsou překládány, což je viditelné ve stavu a diagnostice. Výpadek napájení právě před diskovým zápisem ani selhání úložiště nelze překonat softwarovým slibem.
+ASR není určeno pro nepřetržité několikahodinové rozpoznávání. Používá krátké relace při viditelných titulcích, pauzy a odstupy po chybách. Dostupnost angličtiny a údajů o důvěryhodnosti závisí na systému. Mikrofon telefonu nelze ve všech systémových ASR enginech vynutit místo mikrofonu Bluetooth sluchátek. Sladění je časová/lexikální heuristika, nikoli identifikace hlasu postavy.
 
-Časy jsou měřeny přes monotónní Android hodiny. Doba do spuštění AudioTrack zahrnuje frontu a syntézu, ale **ne skutečné akustické zpoždění Bluetooth sluchátka**.
+Nezaručuje se konkrétní celková latence, výdrž baterie ani tepelný profil bez měření na POCO F7 Ultra. Hodnota uživatelského zpoždění je oddělená od OCR, překladu a přípravy TTS. Finální stav ověření je v [VALIDATION.md](docs/VALIDATION.md).
 
-## Soukromí
+## Soukromí a životní cyklus
 
-Zvuk a hlasové profily zůstávají v RAM. Aplikace zvuk mikrofonu nezapisuje ani neodesílá na server. Pro obnovení nepřehraných vět se jejich text a vygenerovaný český zvuk dočasně ukládají do soukromého úložiště bez systémového zálohování. Po úspěšném přehrání se mažou; STOP je zachová. Uživatel je může vědomě vymazat v nastavení. Historie na obrazovce je jen v paměti a je omezená.
+Snímky, video ani audio se neukládají. Titulky, fronta a krátká historie existují pouze v paměti procesu; ukončení procesu je odstraní. Ukládá se pouze výřez a nastavení. Android zálohy jsou zakázané. Kamera a mikrofon se při zastavení nebo odchodu do pozadí vypnou. Aktuální TTS věta se dokončí. Aplikace neprovozuje skrytou foreground service; pro překlad má zůstat otevřená. Displej během relace zůstává rozsvícený.
 
-Diagnostický JSON neobsahuje nahrávky, přepisy, překlady, hlasové vektory, jména Bluetooth zařízení ani identifikátory telefonu. ML Kit může mít vlastní provozní telemetrii SDK; text překládá lokálně. Internet je potřebný pro první instalaci modelů.
-
-## Technologie, modely a licence
-
-- Vosk Android 0.3.75 / JNA 5.18.1, Apache 2.0 / JNA LGPL 2.1 nebo Apache 2.0. Rychlý `vosk-model-small-en-us-0.15`: 41 205 931 B, Apache 2.0. Volitelný `vosk-model-spk-0.4`: 13 869 103 B, Apache 2.0. Metadata: [oficiální katalog](https://alphacephei.com/vosk/models/model-list.json). HTTPS, přesná velikost a katalogové MD5 kontrolují přenos; MD5 není moderní důkaz autenticity. Rozbalování kontroluje cesty a limity. Poškozený download se nesmí načíst.
-- Whisper.cpp má kvalitní Android ARM64 cestu, ale pro tento první build volíme lehčí průběžný Vosk. Přesnost ve hře se musí změřit; malý model může chybovat více než Whisper.
-- Google ML Kit Translate 17.0.3: bezplatný proprietární Android SDK, nikoli open-source engine. EN → CS běží lokálně. Velikosti a kontrolní součty spravuje SDK; aplikace nevydává odhad 30 MB za přesnou velikost. [Podmínky](https://developers.google.com/ml-kit/language/translation/translation-terms) a [atribuce](https://docs.cloud.google.com/translate/attribution).
-- Marian / OPUS-MT EN-CS existuje, ale vyžadovalo by samostatný Android runtime a tokenizer; není zde nahrazen slovníkem.
-- Piper Jirka medium: 1 hlas, 22 050 Hz, dataset podle model card CC0. Samostatný Sherpa TTS engine obsahuje eSpeak a GPL závislosti; **není staticky přilinkován k této aplikaci s ML Kit**. Vlastní redistribuce enginu vyžaduje splnění jeho licencí. Kvalita a kompatibilita konkrétního externího APK nejsou potvrzené tímto buildem.
-- Herní kontext, překřikování, jména a slang nejsou garantovány. Aplikace ukazuje skutečný anglický přepis a skutečný překlad, nikdy předpřipravené ukázkové odpovědi.
+Nezbytná oprávnění: kamera; volitelně mikrofon, vyžádaný až při zapnutí; internet a stav sítě pro první stažení modelu. Není potřeba úložiště, Bluetooth scan/connect, poloha ani kontakty. ML Kit a nainstalované TTS/ASR služby mohou mít vlastní systémovou telemetrii; aplikace neobsahuje vlastní analytiku ani nahrávání médií.
 
 ## Sestavení
 
-Android Studio s SDK 36, JDK 17. Wrapper Gradle 8.11.1, Android Gradle Plugin 8.10.1, Kotlin 2.1.21. Cílová ABI arm64-v8a.
+Požadavky: **JDK 21**, Android SDK platform 36 a build-tools 36.0.0. Gradle wrapper 8.13, AGP 8.13.1, Kotlin 2.1.21. Přidejte `sdk.dir=/cesta/k/android/sdk` do lokálního `local.properties`, nebo nastavte `ANDROID_HOME`.
 
 ```sh
-./gradlew testDebugUnitTest lintDebug assembleDebug
+./gradlew :core:test :app:lintDebug :app:assembleDebug
 ```
 
-APK je v `app/build/outputs/apk/debug/`. GitHub Actions provede stejné kontroly a navíc ověří podpis a 16KiB zarovnání nativních knihoven. Standardní veřejný GitHub runner nevyžaduje placenou službu; platí obecné limity GitHubu.
+APK: `app/build/outputs/apk/debug/app-arm64-v8a-debug.apk`. Pro produkční release použijte vlastní podpisový klíč, který není součástí zdrojů. Debug keystore je lokální sestavovací prostředek, není vložen do zdrojového archivu. Workflow `.github/workflows/android.yml` provede stejné kontroly a publikuje APK jako build artefakt po vložení projektu do GitHub repozitáře. Workflow zde není prohlašován za spuštěný na GitHubu.
 
-## Testování
+## Zdroje a atribuce
 
-JVM testy kontrolují čistou logiku časové osy, pořadí a rychlosti, shodu hlasových vektorů a WAV parser. Nevyužívají fingované AI výsledky jako doklad přesnosti modelů. Postup telefonu a neprovedené integrační testy: [docs/TESTING.md](docs/TESTING.md).
+Překlady poskytuje Google Translate prostřednictvím ML Kit on-device Translation. Vedle překladu je původní oficiální atribuce. [Google Translate](https://translate.google.com), [informace o službě](https://cloud.google.com/translate), [pravidla ML Kit](https://developers.google.com/ml-kit/language/translation/translation-terms).
+
+Použité knihovny a licenční informace: [THIRD_PARTY.md](docs/THIRD_PARTY.md). Architektura a testovací postup: [ARCHITECTURE.md](docs/ARCHITECTURE.md), [TESTING.md](docs/TESTING.md).

@@ -1,0 +1,58 @@
+{
+  "date": "2026-11-22",
+  "target": "POCO F7 Ultra / Android 16 / arm64-v8a",
+  "package": "cz.primevoice",
+  "version": "1.0.0",
+  "minSdk": 31,
+  "targetSdk": 36,
+  "tests": [
+    {
+      "name": "cz.primevoice.core.ContextAndRegionTest",
+      "tests": "4",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-11-22T11:17:29.944Z",
+      "hostname": "e96259f5d035",
+      "time": "0.125"
+    },
+    {
+      "name": "cz.primevoice.core.MultimodalFusionEngineTest",
+      "tests": "8",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-11-22T11:17:30.072Z",
+      "hostname": "e96259f5d035",
+      "time": "0.054"
+    },
+    {
+      "name": "cz.primevoice.core.SubtitleStabilityDetectorTest",
+      "tests": "15",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-11-22T11:17:30.131Z",
+      "hostname": "e96259f5d035",
+      "time": "0.142"
+    },
+    {
+      "name": "cz.primevoice.core.TranslationQueueManagerTest",
+      "tests": "14",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-11-22T11:17:30.280Z",
+      "hostname": "e96259f5d035",
+      "time": "0.358"
+    }
+  ],
+  "lint_errors": 0,
+  "lint_warnings": 17,
+  "apk_size_bytes": 63562339,
+  "apk_sha256": "20336b664606d7198f3fbdf7069f45a3f3569aec76d6412a3f6ed7a657c019e1",
+  "signing": "Android debug certificate, APK signature v2 verified",
+  "native_16kb_alignment": "All five arm64-v8a ELF libraries have 16384-byte PT_LOAD alignment; zipalign -c -P 16 passed",
+  "instrumented_tests": "Built, not executed: Android 16 emulator partially booted but exited before APK installation; subsequent connection refused. App launch and real Android OCR inference are not verified.",
+  "physical_device_test": "Not performed; no POCO or Bluetooth device connected"
+}
