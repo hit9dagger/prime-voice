@@ -1,12 +1,28 @@
-# PRIME VOICE
+# PRIME VOICE CAMERA 2.0
+
+[Stáhnout univerzální APK](https://github.com/hit9dagger/prime-voice/releases/download/prime-voice-camera-v2.0.0/PRIME-VOICE-CAMERA-2.0.0.apk) · [Menší APK pro POCO / ARM64](https://github.com/hit9dagger/prime-voice/releases/download/prime-voice-camera-v2.0.0/PRIME-VOICE-CAMERA-2.0.0-arm64.apk)
+
+Odkaz otevřete přímo v Chrome, pokud stahování uvnitř ChatGPT nedoběhne. APK je testovací vydání podepsané vývojovým klíčem. Při konfliktu podpisu se starší verzí ji nejprve odinstalujte (tím se odstraní její nastavení a jazyková data).
+
+## Režimy pro slabší i výkonné telefony
+
+- **LIGHT:** výchozí a doporučený režim pro 4 GB RAM; CameraX 720p, výřez OCR do 960 px, nejvýše 2,5 OCR/s, sdílená jedna výpočetní úloha, ML Kit EN→CS a české offline Android TTS. Jde o úsporné nastavení aplikace, nikoli o vymyšlený přepínač uvnitř ML Kit.
+- **STANDARD:** v tomto vydání používá ML Kit. Menší Qwen3 0.6B byl skutečně spuštěn přes LiteRT-LM 0.16.1 na Linuxu, ale vracel nesprávné anglické odpovědi. Jeho stažení a aktivace jsou proto blokované.
+- **ULTRA:** reálná integrace Gemma 3n E2B int4 přes LiteRT-LM 0.16.1 CPU, ve vlastním procesu. Vyžaduje dost RAM/úložiště a přesný samostatně stažený model. Import kontroluje velikost a SHA-256; aktivace vyžaduje načtení a dva české zkušební překlady na daném telefonu. Na našem fyzickém Android zařízení tento model ověřen nebyl. Do úspěšného testu zůstává aktivní LIGHT.
+
+Volba a skutečně aktivní režim jsou zobrazené zvlášť. První spuštění zjistí RAM, volné místo a možnost načíst nativní engine; nikdy samo nestahuje velký model. Neověřená AI se automaticky nedoporučuje. Po výběru ULTRA otevřete oficiální stránku modelu, přijměte podmínky vydavatele na Hugging Face, stáhněte soubor a vraťte se k importu. LIGHT i STANDARD fungují bez registrace. Podmínky vydavatele modelu ULTRA se neobcházejí.
+
+Při nedostatku paměti, smrti procesu AI, timeoutu nebo neplatném výsledku přebírá tutéž položku fronty LIGHT. Hlasová fronta se nevymaže a rozehraná věta se nepřeruší. Při odchodu do pozadí se AI uvolní, příprava modelu zruší a kamera/mikrofon vypnou. Po návratu je před další aktivací AI nutný zkušební překlad.
+
+Podrobnosti: [architektura 2.0 a kompatibilita](docs/CAMERA-2.0.md).
 
 Nový samostatný nativní Android projekt. Kamerou čte celé bloky anglických titulků z televize, lokálně je překládá do češtiny a přehrává přes systémový Android Text-to-Speech. Žádné propojení s PS5, účet, API klíč ani předplatné.
 
-**Cílový systém:** Android 16 / API 36; minimum Android 12 / API 31. Kotlin, Compose, CameraX, ML Kit, Coroutines a StateFlow. Neobsahuje žádný webový obal ani simulovaný překlad.
+**Cílový systém:** Android 16 / API 36; minimum Android 10 / API 29. Kotlin, Compose, CameraX, ML Kit, Coroutines a StateFlow. Neobsahuje žádný webový obal ani simulovaný překlad.
 
 ## První spuštění
 
-1. Nainstalujte `PRIME-VOICE-1.0.0-debug.apk`. Jde o podepsané vývojové APK pro přímou instalaci, nikoli produkční distribuci v Google Play.
+1. Nainstalujte `PRIME-VOICE-CAMERA-2.0.0.apk`. Jde o podepsané vývojové APK pro přímou instalaci, nikoli produkční distribuci v Google Play.
 2. V aplikaci stáhněte překladový model. Přepínač Wi-Fi je ve výchozím stavu zapnutý; přibližně 30 MB na jazykový model, skutečný objem může poskytovatel změnit. Pro první stažení je potřeba internet.
 3. V systému nainstalujte český **offline** TTS hlas. Aplikace automaticky projde nainstalované TTS enginy a nabídne jejich skutečné dostupné české offline hlasy. Po instalaci dalšího hlasu zvolte „Obnovit nainstalované hlasy“.
 4. Na televizi zapněte anglické titulky. Telefon stabilně umístěte před televizor a stiskněte **SPUSTIT PŘEKLAD**. Kamera si vyžádá oprávnění.
@@ -31,15 +47,15 @@ Instalace externího enginu je volitelná a ruční. PRIME VOICE jej nestahuje a
 - Offline Google ML Kit Translation překládá celý dokončený blok. Předzpracování sjednotí mezery, některé hovorové anglické tvary a chrání uživatelem zadaná jména.
 - Jediný přehrávací worker čeká na `UtteranceProgressListener.onDone`. Používá výhradně `QUEUE_ADD`. Nová věta nikdy nevyvolá `stop()` ani `QUEUE_FLUSH`.
 - Fronta zachovává pořadí i při opačném pořadí dokončení překladů. Má limit 40 přijatých vět a malé přechodné zadržení dokončených OCR bloků. Při zaplnění zastaví další analýzu a zobrazí upozornění; během pauzy mohou uniknout nové titulky z televize. Přijaté věty bez pokynu nemaže.
-- Dva překladové workery mají timeout a jedno automatické opakování. Po přetrvávající chybě zůstává věta ve frontě a blokuje pozdější věty. Uživatel zvolí opakování nebo přeskočení. TTS má samostatný watchdog.
+- Jeden překladový worker mají timeout a jedno automatické opakování. Po přetrvávající chybě zůstává věta ve frontě a blokuje pozdější věty. Uživatel zvolí opakování nebo přeskočení. TTS má samostatný watchdog.
 - Pomocný odposlech používá pouze `createOnDeviceSpeechRecognizer`. Nevrací se ke cloudovému rozpoznávání. Bez offline angličtiny zůstává plně dostupná kamera. Koncové výsledky s dostatečnou jistotou a časovou shodou mohou opravit zjevně poškozené OCR slovo nebo ojedinělou mezeru mezi shodnými slovy; mikrofon nikdy nevytváří vlastní položku fronty.
 - Při českém TTS se odposlech vypne, následně krátce počká na dozvuk. Nepředstírá se hardwarové potlačení ozvěny, které systémový SpeechRecognizer neposkytuje aplikaci pod vlastní kontrolou.
-- OCR pracuje přibližně 1–4,5× za sekundu podle změn obrazu a teploty, ne na každém snímku. Při kritické teplotě se relace pozastaví, při silném zahřátí se odposlech vypne.
+- OCR pracuje přibližně 0,8–3,3× za sekundu podle změn obrazu a teploty, ne na každém snímku. Při kritické teplotě se relace pozastaví, při silném zahřátí se odposlech vypne.
 - Ztráta externího zvukového zařízení pozastaví začínání dalších vět. Rozehraná věta se nechá dokončit a může po systémovém přesměrování doznít z telefonu. Pro pokračování uživatel potvrdí zvuk.
 
 ## Přesné limity
 
-ML Kit je oficiální bezplatný lokální základ, **nikoli konverzační jazykový model**. Nedokáže zaručit přirozený slang, správné rodové vztahy ani význam každé herní repliky. Paměť posledních osmi dialogů je lokální a omezená; nejde o kontextový parametr ML Kit. Experimentální generativní překladač není součástí této verze. Podrobné srovnání kandidátů je v [TECHNOLOGY.md](docs/TECHNOLOGY.md).
+ML Kit je oficiální bezplatný lokální základ, **nikoli konverzační jazykový model**. Nedokáže zaručit přirozený slang, správné rodové vztahy ani význam každé herní repliky. Paměť posledních osmi dialogů je lokální a omezená; nejde o kontextový parametr ML Kit. Volitelná integrace ULTRA se aktivuje až po testu na zařízení; není zárukou lepší kvality. Podrobné srovnání kandidátů je v [TECHNOLOGY.md](docs/TECHNOLOGY.md).
 
 Dokončení titulků je heuristika: dlouhá pauza uprostřed dopisování může vypadat jako konec a velmi krátký titulek zachycený jen jednou se zahodí jako nejistý. Opakování identického textu je potlačeno 18 s; zůstávající titulek se neopakuje ani po této době, nová skutečná promluva po zmizení a odstupu opět ano. Identická věta zopakovaná různými postavami rychleji než 18 s může být potlačena.
 
@@ -55,13 +71,13 @@ Nezbytná oprávnění: kamera; volitelně mikrofon, vyžádaný až při zapnut
 
 ## Sestavení
 
-Požadavky: **JDK 21**, Android SDK platform 36 a build-tools 36.0.0. Gradle wrapper 8.13, AGP 8.13.1, Kotlin 2.1.21. Přidejte `sdk.dir=/cesta/k/android/sdk` do lokálního `local.properties`, nebo nastavte `ANDROID_HOME`.
+Požadavky: **JDK 21**, Android SDK platform 36 a build-tools 36.0.0. Gradle wrapper 8.13, AGP 8.13.2, Kotlin 2.2.21. Přidejte `sdk.dir=/cesta/k/android/sdk` do lokálního `local.properties`, nebo nastavte `ANDROID_HOME`.
 
 ```sh
-./gradlew :core:test :app:lintDebug :app:assembleDebug
+./gradlew :core:test :app:lintRelease :app:assembleRelease
 ```
 
-APK: `app/build/outputs/apk/debug/app-arm64-v8a-debug.apk`. Pro produkční release použijte vlastní podpisový klíč, který není součástí zdrojů. Debug keystore je lokální sestavovací prostředek, není vložen do zdrojového archivu. Workflow `.github/workflows/android.yml` provede stejné kontroly a publikuje APK jako build artefakt po vložení projektu do GitHub repozitáře. Workflow zde není prohlašován za spuštěný na GitHubu.
+APK: `app/build/outputs/apk/release/app-universal-release.apk` (všechny podporované architektury), případně menší `app-arm64-v8a-release.apk`. Pro produkční release použijte vlastní podpisový klíč, který není součástí zdrojů. Debug keystore je lokální sestavovací prostředek, není vložen do zdrojového archivu. Workflow `.github/workflows/android.yml` provede stejné kontroly a publikuje APK jako build artefakt po vložení projektu do GitHub repozitáře. Aktuální výsledek běhu je ve stránce Actions a poznámkách vydání na GitHubu.
 
 ## Zdroje a atribuce
 

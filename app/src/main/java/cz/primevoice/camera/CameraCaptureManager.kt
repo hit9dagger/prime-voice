@@ -13,6 +13,8 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import cz.primevoice.data.Settings
+import cz.primevoice.core.CaptureBudget
+import cz.primevoice.core.InferenceGate
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.util.concurrent.Executors
@@ -25,7 +27,9 @@ data class CameraState(val active: Boolean = false, val status: String = "Kamera
 
 class CameraCaptureManager(private val context: Context, private val scope: CoroutineScope,
                            private val settings: () -> Settings, private val canAnalyze: () -> Boolean,
-                           private val onOcr: (OcrResult) -> Unit, private val onError: (String) -> Unit) {
+                           private val onOcr: (OcrResult) -> Unit, private val onError: (String) -> Unit,
+                           private val budget: () -> CaptureBudget, private val gate: InferenceGate,
+                           private val onMemoryPressure: () -> Unit) {
     private val processor = OCRProcessor()
     private val executor = Executors.newSingleThreadExecutor()
     private val workerScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -62,8 +66,9 @@ class CameraCaptureManager(private val context: Context, private val scope: Coro
             try {
                 val p = future.get(); provider = p
                 val rotation = view.display?.rotation ?: Surface.ROTATION_0
+                val limit = budget()
                 val selector = ResolutionSelector.Builder()
-                    .setResolutionStrategy(ResolutionStrategy(Size(1920, 1080), ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER)).build()
+                    .setResolutionStrategy(ResolutionStrategy(Size(limit.width, limit.height), ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER)).build()
                 val pre = Preview.Builder().setResolutionSelector(selector).setTargetRotation(rotation).build()
                 val ana = ImageAnalysis.Builder().setResolutionSelector(selector).setTargetRotation(rotation)
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
@@ -89,13 +94,14 @@ class CameraCaptureManager(private val context: Context, private val scope: Coro
     }
 
     private fun analyze(frame: ImageProxy, token: Int) {
-        val now = SystemClock.elapsedRealtime(); val thermal = mutable.value.thermal
+        val now = SystemClock.elapsedRealtime(); val thermal = mutable.value.thermal; val limit = budget()
         val interval = when {
             thermal >= PowerManager.THERMAL_STATUS_CRITICAL -> Long.MAX_VALUE
             thermal >= PowerManager.THERMAL_STATUS_SEVERE -> 1100L
             thermal >= PowerManager.THERMAL_STATUS_MODERATE -> 550L
-            else -> 220L
+            else -> limit.intervalMs
         }
+        if (!gate.tryCamera()) { frame.close(); busy.set(false); return }
         if (!running || token != generation || !canAnalyze() || now - lastSample < interval || !busy.compareAndSet(false, true)) {
             frame.close(); return
         }
@@ -103,11 +109,11 @@ class CameraCaptureManager(private val context: Context, private val scope: Coro
         workerScope.launch {
             var crop: Crop? = null
             try {
-                val s = settings(); crop = processor.crop(frame, s.region, s.enhance)
+                val s = settings(); crop = processor.crop(frame, s.region, s.enhance, limit.cropWidth)
                 val previous = signature
                 val change = if (previous == null) 100f else crop.signature.indices.sumOf { abs(crop.signature[it] - previous[it]) }.toFloat() / crop.signature.size
                 signature = crop.signature
-                val nextOcr = if (unchanged >= 5 && change < 3f) 900L else interval
+                val nextOcr = if (unchanged >= 5 && change < 3f) maxOf(limit.unchangedIntervalMs, interval) else interval
                 if (now - lastOcr < nextOcr) {
                     mutable.update { it.copy(skipped = it.skipped + 1) }
                     return@launch
@@ -128,9 +134,12 @@ class CameraCaptureManager(private val context: Context, private val scope: Coro
                     withContext(Dispatchers.Main.immediate) { if (running && generation == token) onOcr(result) }
                 }
             } catch (e: CancellationException) { throw e }
+            catch (e: OutOfMemoryError) {
+                withContext(Dispatchers.Main.immediate) { onMemoryPressure() }
+            }
             catch (e: Exception) {
                 withContext(Dispatchers.Main.immediate) { if (running && generation == token) onError("OCR: ${e.localizedMessage}") }
-            } finally { crop?.bitmap?.recycle(); frame.close(); busy.set(false) }
+            } finally { crop?.bitmap?.recycle(); frame.close(); busy.set(false); gate.releaseCamera() }
         }
     }
 

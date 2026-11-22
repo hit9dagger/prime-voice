@@ -29,6 +29,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cz.primevoice.PrimeVoiceViewModel
 import cz.primevoice.core.Stage
+import cz.primevoice.core.ExecutionMode
+import cz.primevoice.core.GIB
+import cz.primevoice.core.MIB
+import cz.primevoice.translation.LocalModelCatalog
 import kotlin.math.roundToInt
 import java.util.Locale
 
@@ -38,6 +42,8 @@ import java.util.Locale
     val settings by vm.settings.state.collectAsStateWithLifecycle()
     val queue by vm.queue.state.collectAsStateWithLifecycle()
     val model by vm.translation.state.collectAsStateWithLifecycle()
+    val execution by vm.translation.execution.collectAsStateWithLifecycle()
+    val transfer by vm.translation.models.state.collectAsStateWithLifecycle()
     val tts by vm.tts.state.collectAsStateWithLifecycle()
     val camera by vm.camera.state.collectAsStateWithLifecycle()
     val asr by vm.asr.state.collectAsStateWithLifecycle()
@@ -53,6 +59,9 @@ import java.util.Locale
     var clearConfirm by remember { mutableStateOf(false) }
     var voiceMenu by remember { mutableStateOf(false) }
     var wifiOnly by rememberSaveable { mutableStateOf(true) }
+    val importModel = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.translation.prepare(wifiOnly, uri)
+    }
     val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) vm.start() else vm.message("Kamera nebyla povolena. Oprávnění lze změnit v nastavení aplikace.")
     }
@@ -77,7 +86,7 @@ import java.util.Locale
                     if (session.running) { editRegion = false; vm.stop() }
                     else if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) vm.start()
                     else cameraPermission.launch(Manifest.permission.CAMERA)
-                }, enabled = session.running || (model.ready && tts.selected.isNotBlank() && !tts.loading && !tts.speaking),
+                }, enabled = session.running || (model.ready && !execution.busy && tts.selected.isNotBlank() && !tts.loading && !tts.speaking),
                     modifier = Modifier.fillMaxWidth().height(58.dp), shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = if (session.running) Color(0xFF293742) else Lime,
                         contentColor = if (session.running) Color.White else Background)) {
@@ -100,7 +109,7 @@ import java.util.Locale
                     }
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
                         Text("PRIME VOICE", style = MaterialTheme.typography.headlineSmall, letterSpacing = 1.sp)
-                        Text("VAŠE HRA. ČESKÝ HLAS.", style = MaterialTheme.typography.labelSmall, color = Muted)
+                        Text("CAMERA 2.0 · VAŠE HRA. ČESKÝ HLAS.", style = MaterialTheme.typography.labelSmall, color = Muted)
                     }
                     IconButton(onClick = { showHelp = true }) { Icon(PrimeIcons.Info, "Nápověda", tint = Muted) }
                 }
@@ -108,6 +117,51 @@ import java.util.Locale
                     Tag("EN → CS", Color(0xFF273444))
                     Tag("OFFLINE", Color(0xFF22331C), Lime)
                     Tag(if (session.running) "PŘEKLAD BĚŽÍ" else "PŘIPRAVENO KE HŘE", Panel, Muted)
+                }
+            }
+            item {
+                PanelCard {
+                    Text("Výkon a modely", style = MaterialTheme.typography.titleLarge)
+                    Text("RAM ${format(execution.resources.totalRam.toFloat() / GIB)} GiB · volná RAM ${format(execution.resources.availableRam.toFloat() / GIB)} GiB · úložiště ${format(execution.resources.freeStorage.toFloat() / GIB)} GiB volné", color = Muted, style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ExecutionMode.entries.forEach { mode ->
+                            FilterChip(selected = execution.selected == mode, onClick = { vm.selectMode(mode) },
+                                enabled = !session.running && !execution.busy, label = { Text(mode.name) })
+                        }
+                    }
+                    Text("Aktivní: ${execution.effective} · doporučeno: ${execution.recommended}", color = Lime)
+                    Text(execution.message, color = Muted)
+                    if (execution.selected == ExecutionMode.LIGHT) {
+                        Text("Úsporný režim aplikace: 720p, OCR nejvýše 2,5× za sekundu, jedna analýza/překlad současně. Celé titulky a hlasová fronta zůstávají zachované.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        val spec = LocalModelCatalog.forMode(execution.selected)!!
+                        Text("${spec.name} · ${format(spec.bytes.toFloat() / MIB)} MiB", style = MaterialTheme.typography.titleMedium)
+                        Text(execution.engineStatus, color = Muted, style = MaterialTheme.typography.bodySmall)
+                        if (execution.selected == ExecutionMode.STANDARD) Text(LocalModelCatalog.standardBlockedReason, color = Muted)
+                        else if (execution.selected !in execution.verified) Text("Na tomto telefonu zatím neověřeno. Výběr sám model nezapne; do úspěšného testu překládá ML Kit.", color = Muted)
+                        if (transfer.active) {
+                            LinearProgressIndicator(progress = { (transfer.downloaded.toFloat() / transfer.total.coerceAtLeast(1)).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+                            Text("${transfer.downloaded / MIB} / ${transfer.total / MIB} MiB · během přípravy ponechte aplikaci otevřenou", color = Muted)
+                        }
+                        Text(transfer.message, color = Muted, style = MaterialTheme.typography.bodySmall)
+                        if (!execution.installed && execution.selected == ExecutionMode.STANDARD) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(wifiOnly, { wifiOnly = it }, enabled = !execution.busy)
+                                Text("Stahovat pouze přes Wi-Fi")
+                            }
+                            Button(onClick = { vm.translation.prepare(wifiOnly) }, enabled = !session.running && !execution.busy && vm.translation.rejection() == null) {
+                                Text("Stáhnout model STANDARD")
+                            }
+                        }
+                        if (!execution.installed && execution.selected == ExecutionMode.ULTRA) {
+                            Text("Gemma vyžaduje přijetí podmínek vydavatele na Hugging Face. Stáhněte soubor gemma-3n-E2B-it-int4.litertlm (3,66 GB), poté jej importujte. Aplikace nevyžaduje API klíč.", color = Muted)
+                            TextButton(onClick = { openUrl(context, spec.page) }) { Text("Oficiální stažení Gemma 3n E2B") }
+                            OutlinedButton(onClick = { importModel.launch(arrayOf("*/*")) }, enabled = !session.running && !execution.busy && vm.translation.rejection() == null) { Text("Importovat stažený model") }
+                        }
+                        if (execution.installed) Button(onClick = { vm.translation.activate() },
+                            enabled = !session.running && !execution.busy && model.ready && vm.translation.rejection() == null) { Text("Ověřit a zapnout model") }
+                    }
+                    if (execution.busy) TextButton(onClick = { vm.translation.cancelPreparation() }) { Text("Zrušit přípravu") }
                 }
             }
             if (!model.ready || tts.selected.isBlank() || tts.loading) item {
@@ -136,8 +190,10 @@ import java.util.Locale
             item {
                 SectionTitle("01", "Kamera", if (camera.active) "AKTIVNÍ" else "VYPNUTÁ")
                 Spacer(Modifier.height(12.dp))
-                SubtitleRegionSelector(vm.camera, session.running, settings.region, editRegion) { r ->
-                    vm.updateSettings { it.copy(region = r) }
+                key(execution.effective) {
+                    SubtitleRegionSelector(vm.camera, session.running, settings.region, editRegion) { r ->
+                        vm.updateSettings { it.copy(region = r) }
+                    }
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { editRegion = !editRegion; vm.calibrate(editRegion) }, enabled = session.running) {
@@ -278,7 +334,7 @@ import java.util.Locale
                     Text("Analýzy ${diagnostic.ocrCount} · vynechané analýzy ${diagnostic.skippedFrames} · jistota ${(diagnostic.confidence * 100).roundToInt()} % (odhad)", color = Muted)
                     Text("Fúze: ${diagnostic.fusion} · teplotní stupeň ${camera.thermal}", color = Muted)
                     TextButton(onClick = { vm.download(wifiOnly) }, enabled = !session.running && !model.downloading) { Text("Znovu připravit offline překladač") }
-                    Text("Kontext v paměti: posledních 8 přehrávaných dialogů. Překladač ML Kit nepodporuje konverzační kontext.", color = Muted)
+                    Text("Kontext v paměti: 8 dialogů; ověřená lokální AI dostává nejvýše 2 předchozí dialogy. ML Kit konverzační kontext nepodporuje.", color = Muted)
                     OutlinedTextField(value = settings.names, onValueChange = { names -> vm.updateSettings { it.copy(names = names.take(500)) } },
                         label = { Text("Jména postav oddělená čárkou") }, placeholder = { Text("Lucia, Jason") }, modifier = Modifier.fillMaxWidth())
                     Text("Zadaná jména se při překladu chrání. Slang a vztahy mezi postavami nemusí lokální překladač pochopit správně.", color = Muted)

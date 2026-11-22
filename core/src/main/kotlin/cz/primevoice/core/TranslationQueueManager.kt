@@ -30,10 +30,11 @@ class TranslationQueueManager(
     private val clock: () -> Long,
     val capacity: Int = 40,
     private val translationTimeoutMs: Long = 15_000,
+    translationParallelism: Int = 2,
     private val onSpoken: (Dialogue) -> Unit = {}
 ) {
     private val mutex = Mutex()
-    private val permits = Semaphore(2)
+    private val permits = Semaphore(translationParallelism.coerceIn(1, 2))
     private val signal = Channel<Unit>(Channel.CONFLATED)
     private val mutable = MutableStateFlow(QueueSnapshot())
     val state = mutable.asStateFlow()

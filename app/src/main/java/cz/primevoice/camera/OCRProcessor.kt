@@ -19,7 +19,7 @@ class OCRProcessor {
     private var failures = 0
 
     /** Crop directly from the luminance plane. No full-size RGB frame and no frame is saved. */
-    fun crop(image: ImageProxy, region: Region, enhance: Boolean): Crop {
+    fun crop(image: ImageProxy, region: Region, enhance: Boolean, maxWidth: Int = 1100): Crop {
         val rect = image.cropRect
         val rotation = image.imageInfo.rotationDegrees
         val rotated = rotation == 90 || rotation == 270
@@ -30,7 +30,7 @@ class OCRProcessor {
         val top = (valid.top * rh).roundToInt().coerceIn(0, rh - 1)
         val width = ((valid.right - valid.left) * rw).roundToInt().coerceIn(1, rw - left)
         val height = ((valid.bottom - valid.top) * rh).roundToInt().coerceIn(1, rh - top)
-        val factor = min(1f, 1100f / width)
+        val factor = min(1f, maxWidth.toFloat() / width)
         val ow = max(1, (width * factor).roundToInt()); val oh = max(1, (height * factor).roundToInt())
         val plane = image.planes[0]; val buffer = plane.buffer
         val gray = IntArray(ow * oh); val histogram = IntArray(256)
@@ -65,11 +65,11 @@ class OCRProcessor {
             n = 0
             while (high > low + 20 && n + histogram[high] < gray.size * .01) { n += histogram[high]; high-- }
         }
-        val pixels = IntArray(gray.size) { i ->
+        for (i in gray.indices) {
             val value = if (enhance && high - low >= 20) ((gray[i] - low) * 255 / (high - low)).coerceIn(0, 255) else gray[i]
-            (255 shl 24) or (value shl 16) or (value shl 8) or value
+            gray[i] = (255 shl 24) or (value shl 16) or (value shl 8) or value
         }
-        val bitmap = Bitmap.createBitmap(pixels, ow, oh, Bitmap.Config.ARGB_8888)
+        val bitmap = Bitmap.createBitmap(gray, ow, oh, Bitmap.Config.ARGB_8888)
         return Crop(bitmap, signature, contrast, (edges / max(count, 1)).toFloat())
     }
 

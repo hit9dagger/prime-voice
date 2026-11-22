@@ -12,7 +12,7 @@ import cz.primevoice.camera.*
 import cz.primevoice.core.*
 import cz.primevoice.data.*
 import cz.primevoice.speech.*
-import cz.primevoice.translation.MlKitTranslationEngine
+import cz.primevoice.translation.AdaptiveTranslationEngine
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
@@ -27,7 +27,9 @@ class PrimeVoiceViewModel(application: Application) : AndroidViewModel(applicati
     val settings = SettingsRepository(application)
     val diagnostics = DiagnosticsManager()
     val contextMemory = DialogueContextManager()
-    val translation = MlKitTranslationEngine(contextMemory) { settings.state.value.names.split(',') }
+    private val gate = InferenceGate()
+    val translation = AdaptiveTranslationEngine(application, viewModelScope, contextMemory,
+        { settings.state.value.names.split(',') }, settings.state.value.mode, gate)
     private val mutable = MutableStateFlow(SessionState())
     val session = mutable.asStateFlow()
     private val detector = SubtitleStabilityDetector()
@@ -41,16 +43,19 @@ class PrimeVoiceViewModel(application: Application) : AndroidViewModel(applicati
         diagnostics.update { it.copy(ttsPreparationMs = elapsed,
             actualLatencyMs = active?.let { item -> SystemClock.elapsedRealtime() - item.subtitle.capturedAt } ?: it.actualLatencyMs) }
     }
-    val queue: TranslationQueueManager = TranslationQueueManager(viewModelScope, translation, tts, SystemClock::elapsedRealtime) {
+    val queue: TranslationQueueManager = TranslationQueueManager(viewModelScope, translation, tts, SystemClock::elapsedRealtime,
+        translationTimeoutMs = 30_000, translationParallelism = 1) {
         contextMemory.remember(it.subtitle.text, it.czech)
     }
     val asr = SpeechRecognitionProcessor(application) { fusion.add(it) }
     val camera = CameraCaptureManager(application, viewModelScope, { settings.state.value }, {
         mutable.value.running && !mutable.value.calibrating && mutable.value.retained == 0 && queue.state.value.items.size < queue.capacity
-    }, { readings.trySend(it) }, { diagnostics.error(it); mutable.update { s -> s.copy(message = it) } })
+    }, { readings.trySend(it) }, { diagnostics.error(it); mutable.update { s -> s.copy(message = it) } },
+        { val e = translation.execution.value; ExecutionPolicy.capture(e.effective, e.resources) }, gate,
+        { memoryPressure() })
 
     init {
-        viewModelScope.launch { translation.checkModels() }
+        viewModelScope.launch { translation.initialize() }
         viewModelScope.launch { tts.discover() }
         viewModelScope.launch {
             for (result in readings) {
@@ -75,11 +80,18 @@ class PrimeVoiceViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             tts.state.map { it.speaking }.distinctUntilChanged().collect { asr.suppressEcho(it) }
         }
+        viewModelScope.launch { gate.heavy.collect { asr.suppressResources(it) } }
+        viewModelScope.launch {
+            while (isActive) { delay(5000); translation.refresh() }
+        }
         viewModelScope.launch {
             camera.state.map { it.thermal }.distinctUntilChanged().collect { level ->
                 if (level >= PowerManager.THERMAL_STATUS_CRITICAL && mutable.value.running) {
                     stop(); mutable.update { it.copy(message = "Telefon je příliš horký. Překlad byl pozastaven; čekající věty zůstávají ve frontě.") }
-                } else if (level >= PowerManager.THERMAL_STATUS_SEVERE) asr.enable(false)
+                } else if (level >= PowerManager.THERMAL_STATUS_SEVERE) {
+                    asr.enable(false)
+                    translation.fallback("Telefon se zahřívá. Náročná AI byla uvolněna; pokračuje LIGHT.")
+                }
             }
         }
         viewModelScope.launch {
@@ -89,7 +101,7 @@ class PrimeVoiceViewModel(application: Application) : AndroidViewModel(applicati
                 val q = queue.state.value
                 diagnostics.update { it.copy(translationMs = q.lastReady?.translationMs ?: 0,
                     skippedFrames = camera.state.value.skipped) }
-                delay(250)
+                delay(if (ExecutionPolicy.economical(translation.execution.value.resources)) 750 else 350)
             }
         }
     }
@@ -101,6 +113,15 @@ class PrimeVoiceViewModel(application: Application) : AndroidViewModel(applicati
         mutable.update { it.copy(retained = retained.size) }
     }
     fun download(wifiOnly: Boolean) { viewModelScope.launch { translation.download(wifiOnly) } }
+    fun selectMode(mode: ExecutionMode) {
+        if (mutable.value.running || translation.execution.value.busy) return
+        settings.update { it.copy(mode = mode) }; translation.select(mode)
+    }
+    fun memoryPressure() {
+        translation.memoryPressure(); asr.enable(false)
+        diagnostics.error("Paměťový tlak: AI uvolněna, OCR omezeno, fronta zachována.")
+    }
+    fun background() { stop(); translation.background() }
     fun refreshVoices() { if (!mutable.value.running && !tts.state.value.speaking) viewModelScope.launch { tts.discover() } }
     fun selectVoice(id: String) {
         if (tts.state.value.speaking || mutable.value.running) return
@@ -119,7 +140,7 @@ class PrimeVoiceViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
     fun start() {
-        if (!translation.state.value.ready || tts.state.value.selected.isBlank() || tts.state.value.loading) {
+        if (!translation.state.value.ready || translation.execution.value.busy || tts.state.value.selected.isBlank() || tts.state.value.loading) {
             mutable.update { it.copy(message = "Nejprve připravte offline překladač a český hlas.") }; return
         }
         if (camera.state.value.thermal >= PowerManager.THERMAL_STATUS_CRITICAL) {

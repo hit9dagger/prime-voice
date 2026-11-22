@@ -22,7 +22,7 @@ lokální ASR → časová evidence → MultimodalFusionEngine
 - CameraX analyzer je na jednom executor vlákně, grayscale výřez/OCR na Default dispatcheru. AtomicBoolean dovoluje jedinou analýzu najednou. ImageProxy se zavře v každé větvi, také při chybě; bitmapa žije až do dokončení ML Kit úlohy. Zastaralé výsledky po zastavení odfiltruje generace kamery.
 - Sensor cropRect a sdílený CameraX ViewPort sjednocují PreviewView.FILL_CENTER s obrazem pro OCR. Region je normalizovaný k viditelnému náhledu. Převod souřadnic podporuje 0/90/180/270 stupňů.
 - OCR snapshots se smějí slučovat v conflated kanálu: jde o nové pozorování stejného obrazu. **Dokončené bloky se tímto kanálem neposílají.** Po stabilizaci se uchovají do přijetí do fronty. Při tlaku se analýza zastaví.
-- Queue manager chrání stav Mutexem. Dva asynchronní překladové joby se předávají Semaphorem. Android ML Kit adapter serializuje přístup ke klientovi; překlad dál probíhá nezávisle na TTS.
+- Queue manager chrání stav Mutexem. Aplikace používá jeden překladový worker; sdílený InferenceGate serializuje také OCR. Android ML Kit adapter serializuje přístup ke klientovi; překlad dál probíhá nezávisle na TTS.
 - Jediný playback job vybírá výhradně první položku, čeká na její READY a nakonec onDone. FAILED blokuje pozdější položky. Změna hlasu, ukázka i přehrávání používají stejný TTS Mutex.
 
 ## Stavový automat fronty
@@ -31,7 +31,7 @@ lokální ASR → časová evidence → MultimodalFusionEngine
 
 `TRANSLATING/SPEAKING → FAILED → ruční opakování nebo přeskočení`
 
-Nové položky se přidávají za již existující. Příchod položky nikdy nezastaví TTS. Timeout překladače je 15 s na pokus, dva pokusy s krátkým odstupem. Chybující překladač proto nepředstírá úspěch ani nezahazuje text. TTS watchdog 180 s označí chybu a zastaví pouze vadnou/visející TTS úlohu před případným opakováním; nejde o reakci na příchod nového titulku.
+Nové položky se přidávají za již existující. Příchod položky nikdy nezastaví TTS. Timeout překladače je 30 s (lokální AI má vlastní limit 12 s) na pokus, dva pokusy s krátkým odstupem. Chybující překladač proto nepředstírá úspěch ani nezahazuje text. TTS watchdog 180 s označí chybu a zastaví pouze vadnou/visející TTS úlohu před případným opakováním; nejde o reakci na příchod nového titulku.
 
 Kapacita fronty 40, dokončené bloky odmítnuté kvůli kapacitě se krátce drží ve vstupním koordinátoru. Po zaplnění se nové OCR nepřijímá. Uživatel vidí počet čekajících vět, stáří čela i poslední naměřenou latenci. Vymazání/přeskočení je výslovné a nikdy neodstraní SPEAKING položku.
 

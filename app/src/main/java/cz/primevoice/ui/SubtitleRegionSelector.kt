@@ -29,7 +29,7 @@ import kotlin.math.*
                                        region: Region, editing: Boolean, onRegion: (Region) -> Unit) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
-    val view = remember { PreviewView(context).apply { implementationMode = PreviewView.ImplementationMode.COMPATIBLE } }
+    val view = remember { PreviewView(context).apply { implementationMode = PreviewView.ImplementationMode.PERFORMANCE } }
     var draft by remember(region) { mutableStateOf(region) }
     var origin by remember { mutableStateOf(Offset.Zero) }
     DisposableEffect(running, owner, view) {

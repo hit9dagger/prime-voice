@@ -1,4 +1,12 @@
-# Výsledek ověření – 22. 11. 2026
+# Výsledky ověření
+
+## CAMERA 2.0
+
+Aktuální pravidla, skutečný neúspěšný test Qwen a hranice ověření Gemma jsou v [CAMERA-2.0.md](CAMERA-2.0.md). Přiložené reporty a GitHub Actions patří sestavenému commitu. Fyzické 4GB zařízení ani POCO/Bluetooth nebyly k dispozici.
+
+## Historické lokální ověření verze 1.0
+
+Stav před zveřejněním verze 1.0; nepopisuje nové APK 2.0.
 
 ## Provedené kontroly
 

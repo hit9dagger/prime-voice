@@ -13,12 +13,13 @@ data class AsrState(val available: Boolean, val listening: Boolean = false, val 
 /** Short on-device sessions triggered by visible subtitles. Never falls back to a cloud recognizer. */
 class SpeechRecognitionProcessor(private val context: Context, private val onEvidence: (SpeechEvidence) -> Unit) {
     private val handler = Handler(Looper.getMainLooper())
-    private val available = SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+    private val available = Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
     private val mutable = MutableStateFlow(AsrState(available))
     val state = mutable.asStateFlow()
     private var recognizer: SpeechRecognizer? = null
     private var enabled = false
     private var echoSuppressed = false
+    private var resourceSuppressed = false
     private var lastVisible = -100_000L
     private var started = 0L
     private var failures = 0
@@ -46,8 +47,14 @@ class SpeechRecognitionProcessor(private val context: Context, private val onEvi
             if (enabled) mutable.value = AsrState(available, false, "Pauza mikrofonu během českého dabingu")
         } else if (enabled) handler.postDelayed({ maybeStart() }, 650)
     }
+    fun suppressResources(value: Boolean) {
+        if (resourceSuppressed == value) return
+        resourceSuppressed = value
+        if (value) { cancel(); if (enabled) mutable.value = AsrState(available, false, "Pauza mikrofonu během náročné inference") }
+        else maybeStart()
+    }
     private fun maybeStart() {
-        if (!enabled || !available || echoSuppressed || mutable.value.listening || failures >= 4 ||
+        if (Build.VERSION.SDK_INT < 31 || !enabled || !available || echoSuppressed || resourceSuppressed || mutable.value.listening || failures >= 4 ||
             SystemClock.elapsedRealtime() - lastVisible > 3500) return
         val token = ++generation
         try {

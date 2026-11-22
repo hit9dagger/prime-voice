@@ -16,7 +16,13 @@ class MainActivity : ComponentActivity() {
     }
     override fun onStop() {
         // Foreground-only by design: no hidden camera/mic or foreground-service restrictions.
-        viewModel.stop()
+        viewModel.background()
         super.onStop()
     }
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW &&
+            level != android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) viewModel.memoryPressure()
+    }
+    override fun onLowMemory() { super.onLowMemory(); viewModel.memoryPressure() }
 }

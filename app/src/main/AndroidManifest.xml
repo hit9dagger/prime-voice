@@ -10,9 +10,10 @@
         <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
         <intent><action android:name="android.speech.RecognitionService" /></intent>
     </queries>
-    <application android:allowBackup="false" android:dataExtractionRules="@xml/data_extraction_rules" android:label="PRIME VOICE"
+    <application android:allowBackup="false" android:dataExtractionRules="@xml/data_extraction_rules" android:label="PRIME VOICE CAMERA"
         android:icon="@drawable/ic_launcher" android:theme="@style/Theme.PrimeVoice"
         android:supportsRtl="true" android:usesCleartextTraffic="false">
+        <service android:name=".translation.LocalInferenceService" android:exported="false" android:process=":inference" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
