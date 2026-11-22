@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,15 +19,49 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
       - name: Install SDK
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - name: Tests, lint and installable debug APK
         run: ./gradlew :core:test :app:lintDebug :app:assembleDebug --no-daemon
+      - name: Prepare verified download files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-arm64-v8a-debug.apk dist/PRIME-VOICE-1.0.0-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose dist/PRIME-VOICE-1.0.0-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 dist/PRIME-VOICE-1.0.0-debug.apk
+          git archive --format=zip --prefix=PRIME-VOICE/ HEAD > dist/PRIME-VOICE-zdrojovy-projekt.zip
+          zip -qr dist/PRIME-VOICE-testy-a-overeni.zip core/build/reports/tests/test app/build/reports/lint-results-debug.html
+          cp README.md dist/PRIME-VOICE-navod.md
+          (cd dist && sha256sum *.apk *.zip *.md > SHA256SUMS.txt)
+          cat > dist/release-notes.md <<'NOTES'
+          ## Stažení a instalace do telefonu
+          **[Stáhnout PRIME VOICE – instalační APK](https://github.com/hit9dagger/prime-voice/releases/download/prime-voice-clean-v1.0.0/PRIME-VOICE-1.0.0-debug.apk)**
+          
+          Otevřete odkaz v telefonu POCO F7 Ultra. Po stažení otevřete soubor APK a zvolte **Instalovat**. Pokud Android požádá, povolte instalaci z použitého prohlížeče.
+          
+          Po prvním spuštění povolte kameru, stáhněte překladový model a vyberte nainstalovaný český offline hlas. Potom označte oblast anglických titulků a stiskněte **SPUSTIT PŘEKLAD**.
+          
+          Jde o novou samostatnou implementaci s kamerovým OCR, lokálním překladem, sekvenčním českým TTS a volitelným pomocným mikrofonem. Toto je testovací, ladicím klíčem podepsané APK pro arm64-v8a. Instalace přes starší verzi podepsanou jiným klíčem může vyžadovat její odinstalování.
+          
+          Automatické testy, Android lint a sestavení proběhly v GitHub Actions před zveřejněním. Podpis APK a zarovnání pro 16KB stránky byly ověřeny. Provoz na fyzickém POCO F7 Ultra, Bluetooth a několikahodinové hraní zatím nebyly prakticky ověřeny.
+          
+          ML Kit není kontextový jazykový model; kvalita slangu a návazností má omezení. Dostupnost českého hlasu a offline odposlechu závisí na nainstalovaných komponentách telefonu.
+          
+          [Zdrojový projekt a podrobný návod](https://github.com/hit9dagger/prime-voice/tree/prime-voice-clean-1.0.0)
+          NOTES
+          printf '\nSestavený commit: %s\n\nSHA-256 APK:\n\x60\x60\x60\n' "$GITHUB_SHA" >> dist/release-notes.md
+          sha256sum dist/PRIME-VOICE-1.0.0-debug.apk >> dist/release-notes.md
+          printf '\x60\x60\x60\n' >> dist/release-notes.md
       - uses: actions/upload-artifact@v4
         with:
-          name: PRIME-VOICE-debug-apk
-          path: app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
+          name: PRIME-VOICE-download
+          path: dist/
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
@@ -33,3 +70,31 @@ jobs:
           path: |
             core/build/reports/tests/test/
             app/build/reports/lint-results-debug.html
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/prime-voice-clean-1.0.0' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: PRIME-VOICE-download
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: prime-voice-clean-v1.0.0
+          target_commitish: ${{ github.sha }}
+          name: PRIME VOICE 1.0.0 – APK pro POCO F7 Ultra
+          body_path: dist/release-notes.md
+          draft: false
+          prerelease: true
+          make_latest: false
+          fail_on_unmatched_files: true
+          files: |
+            dist/PRIME-VOICE-1.0.0-debug.apk
+            dist/PRIME-VOICE-zdrojovy-projekt.zip
+            dist/PRIME-VOICE-testy-a-overeni.zip
+            dist/PRIME-VOICE-navod.md
+            dist/SHA256SUMS.txt
