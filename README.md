@@ -1,8 +1,14 @@
-# PRIME VOICE CAMERA 2.0
+# PRIME VOICE CAMERA 2.0.1
 
-[Stáhnout univerzální APK](https://github.com/hit9dagger/prime-voice/releases/download/prime-voice-camera-v2.0.0/PRIME-VOICE-CAMERA-2.0.0.apk) · [Menší APK pro POCO / ARM64](https://github.com/hit9dagger/prime-voice/releases/download/prime-voice-camera-v2.0.0/PRIME-VOICE-CAMERA-2.0.0-arm64.apk)
+[Stáhnout univerzální APK](https://github.com/hit9dagger/prime-voice/releases/download/prime-voice-camera-v2.0.1/PRIME-VOICE-CAMERA-2.0.1.apk) · [Menší APK pro POCO / ARM64](https://github.com/hit9dagger/prime-voice/releases/download/prime-voice-camera-v2.0.1/PRIME-VOICE-CAMERA-2.0.1-arm64.apk)
 
 Odkaz otevřete přímo v Chrome, pokud stahování uvnitř ChatGPT nedoběhne. APK je testovací vydání podepsané vývojovým klíčem. Při konfliktu podpisu se starší verzí ji nejprve odinstalujte (tím se odstraní její nastavení a jazyková data).
+
+## Oprava kamery ve verzi 2.0.1
+
+Opraven trvale zamčený semafor po přeskočeném snímku. Náhled mohl ve 2.0 běžet, i když další OCR a překlad už byly zablokované. [Přesná příčina, změny a testy](docs/OCR-2.0.1.md).
+
+OCR nyní spustíte i bez připravených překladových dat nebo českého hlasu; do jejich přípravy se anglický text pouze zobrazuje. V **Diagnostika a slovník jmen** lze při zastavení zapnout **Test OCR – celý obraz bez filtrů**. Namířte kameru na „The weather is beautiful today.“ a spusťte test. Počítadla snímků a OCR musí růst a surový text se má objevit. Pro běžné hraní test vypněte a označte oblast titulků.
 
 ## Režimy pro slabší i výkonné telefony
 
@@ -16,13 +22,13 @@ Při nedostatku paměti, smrti procesu AI, timeoutu nebo neplatném výsledku p�
 
 Podrobnosti: [architektura 2.0 a kompatibilita](docs/CAMERA-2.0.md).
 
-Nový samostatný nativní Android projekt. Kamerou čte celé bloky anglických titulků z televize, lokálně je překládá do češtiny a přehrává přes systémový Android Text-to-Speech. Žádné propojení s PS5, účet, API klíč ani předplatné.
+Nativní Android projekt navazující na předchozí verze. Kamerou čte celé bloky anglických titulků z televize, lokálně je překládá do češtiny a přehrává přes systémový Android Text-to-Speech. Žádné propojení s PS5, účet, API klíč ani předplatné.
 
 **Cílový systém:** Android 16 / API 36; minimum Android 10 / API 29. Kotlin, Compose, CameraX, ML Kit, Coroutines a StateFlow. Neobsahuje žádný webový obal ani simulovaný překlad.
 
 ## První spuštění
 
-1. Nainstalujte `PRIME-VOICE-CAMERA-2.0.0.apk`. Jde o podepsané vývojové APK pro přímou instalaci, nikoli produkční distribuci v Google Play.
+1. Nainstalujte `PRIME-VOICE-CAMERA-2.0.1.apk`. Jde o podepsané vývojové APK pro přímou instalaci, nikoli produkční distribuci v Google Play.
 2. V aplikaci stáhněte překladový model. Přepínač Wi-Fi je ve výchozím stavu zapnutý; přibližně 30 MB na jazykový model, skutečný objem může poskytovatel změnit. Pro první stažení je potřeba internet.
 3. V systému nainstalujte český **offline** TTS hlas. Aplikace automaticky projde nainstalované TTS enginy a nabídne jejich skutečné dostupné české offline hlasy. Po instalaci dalšího hlasu zvolte „Obnovit nainstalované hlasy“.
 4. Na televizi zapněte anglické titulky. Telefon stabilně umístěte před televizor a stiskněte **SPUSTIT PŘEKLAD**. Kamera si vyžádá oprávnění.
@@ -47,7 +53,7 @@ Instalace externího enginu je volitelná a ruční. PRIME VOICE jej nestahuje a
 - Offline Google ML Kit Translation překládá celý dokončený blok. Předzpracování sjednotí mezery, některé hovorové anglické tvary a chrání uživatelem zadaná jména.
 - Jediný přehrávací worker čeká na `UtteranceProgressListener.onDone`. Používá výhradně `QUEUE_ADD`. Nová věta nikdy nevyvolá `stop()` ani `QUEUE_FLUSH`.
 - Fronta zachovává pořadí i při opačném pořadí dokončení překladů. Má limit 40 přijatých vět a malé přechodné zadržení dokončených OCR bloků. Při zaplnění zastaví další analýzu a zobrazí upozornění; během pauzy mohou uniknout nové titulky z televize. Přijaté věty bez pokynu nemaže.
-- Jeden překladový worker mají timeout a jedno automatické opakování. Po přetrvávající chybě zůstává věta ve frontě a blokuje pozdější věty. Uživatel zvolí opakování nebo přeskočení. TTS má samostatný watchdog.
+- Překladový worker má timeout a jedno automatické opakování. Po přetrvávající chybě zůstává věta ve frontě a blokuje pozdější věty. Uživatel zvolí opakování nebo přeskočení. TTS má samostatný watchdog.
 - Pomocný odposlech používá pouze `createOnDeviceSpeechRecognizer`. Nevrací se ke cloudovému rozpoznávání. Bez offline angličtiny zůstává plně dostupná kamera. Koncové výsledky s dostatečnou jistotou a časovou shodou mohou opravit zjevně poškozené OCR slovo nebo ojedinělou mezeru mezi shodnými slovy; mikrofon nikdy nevytváří vlastní položku fronty.
 - Při českém TTS se odposlech vypne, následně krátce počká na dozvuk. Nepředstírá se hardwarové potlačení ozvěny, které systémový SpeechRecognizer neposkytuje aplikaci pod vlastní kontrolou.
 - OCR pracuje přibližně 0,8–3,3× za sekundu podle změn obrazu a teploty, ne na každém snímku. Při kritické teplotě se relace pozastaví, při silném zahřátí se odposlech vypne.

@@ -33,7 +33,7 @@ class OfflineOcrTest {
         } finally { processor.close(); bitmap.recycle() }
     }
 
-    @Test fun mainActivityLaunchesAndClosesWithoutCameraOrMicrophonePermission() {
+    @Test fun mainActivityLaunchesAndCloses() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { assertFalse(it.isFinishing) }
         }

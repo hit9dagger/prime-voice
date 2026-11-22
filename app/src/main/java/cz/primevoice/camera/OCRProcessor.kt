@@ -20,8 +20,11 @@ class OCRProcessor {
 
     /** Crop directly from the luminance plane. No full-size RGB frame and no frame is saved. */
     fun crop(image: ImageProxy, region: Region, enhance: Boolean, maxWidth: Int = 1100): Crop {
+        require(image.format == android.graphics.ImageFormat.YUV_420_888) { "Očekáván YUV_420_888, přišel formát ${image.format}" }
         val rect = image.cropRect
+        require(!rect.isEmpty) { "Prázdný výřez kamery" }
         val rotation = image.imageInfo.rotationDegrees
+        require(rotation in setOf(0, 90, 180, 270)) { "Nepodporovaná rotace $rotation" }
         val rotated = rotation == 90 || rotation == 270
         val rw = if (rotated) rect.height() else rect.width()
         val rh = if (rotated) rect.width() else rect.height()
@@ -32,7 +35,8 @@ class OCRProcessor {
         val height = ((valid.bottom - valid.top) * rh).roundToInt().coerceIn(1, rh - top)
         val factor = min(1f, maxWidth.toFloat() / width)
         val ow = max(1, (width * factor).roundToInt()); val oh = max(1, (height * factor).roundToInt())
-        val plane = image.planes[0]; val buffer = plane.buffer
+        val plane = image.planes[0]; val buffer = plane.buffer.duplicate()
+        val offset = buffer.position()
         val gray = IntArray(ow * oh); val histogram = IntArray(256)
         var sum = 0.0; var sumSquares = 0.0
         for (y in 0 until oh) for (x in 0 until ow) {
@@ -45,7 +49,7 @@ class OCRProcessor {
                 270 -> { sx = rect.right - 1 - dy; sy = rect.top + dx }
                 else -> { sx = rect.left + dx; sy = rect.top + dy }
             }
-            val value = buffer.get(sy * plane.rowStride + sx * plane.pixelStride).toInt() and 255
+            val value = buffer.get(offset + sy * plane.rowStride + sx * plane.pixelStride).toInt() and 255
             gray[y * ow + x] = value; histogram[value]++; sum += value; sumSquares += value * value
         }
         val signature = IntArray(32 * 16) { index ->
@@ -82,7 +86,8 @@ class OCRProcessor {
             val sorted = lines.sortedBy { it.boundingBox?.top ?: 0 }
             val rows = mutableListOf<MutableList<com.google.mlkit.vision.text.Text.Line>>()
             for (line in sorted) {
-                val box = line.boundingBox ?: continue
+                val box = line.boundingBox
+                if (box == null) { rows.add(mutableListOf(line)); continue }
                 val row = rows.lastOrNull()
                 val anchor = row?.firstOrNull()?.boundingBox
                 if (anchor != null && abs(box.centerY() - anchor.centerY()) < min(box.height(), anchor.height()) * .55f)

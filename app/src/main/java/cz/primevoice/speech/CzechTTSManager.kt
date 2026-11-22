@@ -20,7 +20,7 @@ data class VoiceOption(val engine: String, val engineLabel: String, val name: St
 }
 data class TtsState(val loading: Boolean = true, val voices: List<VoiceOption> = emptyList(),
                     val selected: String = "", val speaking: Boolean = false,
-                    val error: String? = null, val pitchSupported: Boolean = true)
+                    val error: String? = null, val pitchSupported: Boolean = true, val audioBytes: Long = 0)
 
 class CzechTTSManager(private val context: Context, private val output: AudioOutputManager,
                       private val settings: () -> Settings,
@@ -93,6 +93,9 @@ class CzechTTSManager(private val context: Context, private val output: AudioOut
             engine!!.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
                     if (utteranceId == currentId) onPreparation(SystemClock.elapsedRealtime() - requestedAt)
+                }
+                override fun onAudioAvailable(utteranceId: String?, audio: ByteArray?) {
+                    if (utteranceId == currentId && audio != null) mutable.update { it.copy(audioBytes = it.audioBytes + audio.size) }
                 }
                 override fun onDone(utteranceId: String?) {
                     if (utteranceId == currentId) completion?.complete(Unit)

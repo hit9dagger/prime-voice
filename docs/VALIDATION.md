@@ -1,8 +1,14 @@
 # Výsledky ověření
 
-## CAMERA 2.0
+## CAMERA 2.0.1
 
-Aktuální pravidla, skutečný neúspěšný test Qwen a hranice ověření Gemma jsou v [CAMERA-2.0.md](CAMERA-2.0.md). Přiložené reporty a GitHub Actions patří sestavenému commitu. Fyzické 4GB zařízení ani POCO/Bluetooth nebyly k dispozici.
+Lokálně prošlo 69 Kotlin/JVM testů, 0 selhání, 0 chyb. Sestavení release APK i instrumentovaných testů prošlo. Lint: 0 chyb, 23 upozornění (především novější závislosti a doporučení API). Publikace APK je podmíněna úspěšným sestavením, testy a kontrolou podpisu.
+
+Aktuální rozsah Android ověření, přesná příčina regrese a limity: [OCR-2.0.1.md](OCR-2.0.1.md). Výsledky emulátoru jsou přiloženy k vydání jako `emulator-results.txt`, příprava offline modelu jako `model-preparation.txt`. Protokol obsahuje skutečně vykonané testy; definice testu sama není označena za úspěšné ověření. POCO F7 Ultra, Bluetooth, Gemma inference a několika hodinový provoz vyžadují fyzické zařízení.
+
+## Historická CAMERA 2.0
+
+Prošlo 64 JVM a čtyři Android testy na API29/4GB emulátoru. OCR test tehdy vstupoval přímo Bitmapou do ML Kit a neověřil vlastnictví zámku ve skutečném CameraX analyzátoru. Proto nezachytil chybu opravenou v 2.0.1. Viz [CAMERA-2.0.md](CAMERA-2.0.md).
 
 ## Historické lokální ověření verze 1.0
 

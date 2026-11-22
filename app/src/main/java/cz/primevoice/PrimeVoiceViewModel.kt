@@ -21,7 +21,7 @@ import kotlinx.coroutines.sync.withLock
 
 data class SessionState(val running: Boolean = false, val latestEnglish: String = "",
                         val message: String? = null, val retained: Int = 0, val now: Long = 0,
-                        val calibrating: Boolean = false)
+                        val calibrating: Boolean = false, val ocrDiagnostic: Boolean = false)
 
 class PrimeVoiceViewModel(application: Application) : AndroidViewModel(application) {
     val settings = SettingsRepository(application)
@@ -44,15 +44,15 @@ class PrimeVoiceViewModel(application: Application) : AndroidViewModel(applicati
             actualLatencyMs = active?.let { item -> SystemClock.elapsedRealtime() - item.subtitle.capturedAt } ?: it.actualLatencyMs) }
     }
     val queue: TranslationQueueManager = TranslationQueueManager(viewModelScope, translation, tts, SystemClock::elapsedRealtime,
-        translationTimeoutMs = 30_000, translationParallelism = 1) {
-        contextMemory.remember(it.subtitle.text, it.czech)
-    }
+        translationTimeoutMs = 30_000, translationParallelism = 1)
     val asr = SpeechRecognitionProcessor(application) { fusion.add(it) }
     val camera = CameraCaptureManager(application, viewModelScope, { settings.state.value }, {
-        mutable.value.running && !mutable.value.calibrating && mutable.value.retained == 0 && queue.state.value.items.size < queue.capacity
+        mutable.value.running && !mutable.value.calibrating &&
+            (mutable.value.ocrDiagnostic || !pipelineReady() ||
+                (mutable.value.retained == 0 && queue.state.value.items.size < queue.capacity))
     }, { readings.trySend(it) }, { diagnostics.error(it); mutable.update { s -> s.copy(message = it) } },
         { val e = translation.execution.value; ExecutionPolicy.capture(e.effective, e.resources) }, gate,
-        { memoryPressure() })
+        { memoryPressure() }, { mutable.value.ocrDiagnostic })
 
     init {
         viewModelScope.launch { translation.initialize() }
@@ -60,6 +60,10 @@ class PrimeVoiceViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             for (result in readings) {
                 if (!mutable.value.running) continue
+                mutable.update { it.copy(latestEnglish = result.reading.text) }
+                // OCR always runs independently of translation models and voices. Diagnostic text
+                // is shown verbatim, without fusion, completeness or duplicate filtering.
+                if (mutable.value.ocrDiagnostic || !pipelineReady()) continue
                 if (result.reading.text.isNotBlank()) asr.subtitlesVisible()
                 val fused = fusion.fuse(result.reading)
                 mutable.update { it.copy(latestEnglish = result.reading.text) }
@@ -97,7 +101,10 @@ class PrimeVoiceViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             while (isActive) {
                 mutable.update { it.copy(now = SystemClock.elapsedRealtime()) }
-                if (mutable.value.running) drainRetained()
+                if (mutable.value.running && !mutable.value.ocrDiagnostic && pipelineReady()) {
+                    if (!queue.state.value.enabled) queue.start(settings.state.value.delaySeconds)
+                    drainRetained()
+                }
                 val q = queue.state.value
                 diagnostics.update { it.copy(translationMs = q.lastReady?.translationMs ?: 0,
                     skippedFrames = camera.state.value.skipped) }
@@ -105,7 +112,11 @@ class PrimeVoiceViewModel(application: Application) : AndroidViewModel(applicati
             }
         }
     }
+    private fun pipelineReady() = translation.state.value.ready && !translation.execution.value.busy &&
+        tts.state.value.selected.isNotBlank() && !tts.state.value.loading
+
     private suspend fun drainRetained() {
+        if (!pipelineReady() || mutable.value.ocrDiagnostic) return
         while (retained.isNotEmpty()) {
             if (!queue.offer(retained.first())) break
             retained.removeFirst()
@@ -140,9 +151,6 @@ class PrimeVoiceViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
     fun start() {
-        if (!translation.state.value.ready || translation.execution.value.busy || tts.state.value.selected.isBlank() || tts.state.value.loading) {
-            mutable.update { it.copy(message = "Nejprve připravte offline překladač a český hlas.") }; return
-        }
         if (camera.state.value.thermal >= PowerManager.THERMAL_STATUS_CRITICAL) {
             mutable.update { it.copy(message = "Nechte telefon vychladnout.") }; return
         }
@@ -151,10 +159,15 @@ class PrimeVoiceViewModel(application: Application) : AndroidViewModel(applicati
         }
         viewModelScope.launch {
             detectorMutex.withLock { detector.reset() }
-            queue.start(settings.state.value.delaySeconds)
-            mutable.update { it.copy(running = true, message = null) }
+            if (pipelineReady() && !mutable.value.ocrDiagnostic) queue.start(settings.state.value.delaySeconds) else queue.pause()
+            mutable.update { it.copy(running = true, message = if (!pipelineReady())
+                "OCR běží samostatně. Pro překlad a dabing připravte offline překladač a český hlas. Do té doby se text pouze zobrazuje." else null) }
             applyMicrophone()
         }
+    }
+    fun ocrDiagnostic(enabled: Boolean) {
+        if (mutable.value.running) return
+        mutable.update { it.copy(ocrDiagnostic = enabled) }
     }
     fun stop() {
         mutable.update { it.copy(running = false, calibrating = false) }
@@ -167,7 +180,7 @@ class PrimeVoiceViewModel(application: Application) : AndroidViewModel(applicati
     }
     private fun applyMicrophone() {
         val granted = ContextCompat.checkSelfPermission(getApplication(), Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        asr.enable(mutable.value.running && settings.state.value.microphone && granted &&
+        asr.enable(mutable.value.running && !mutable.value.ocrDiagnostic && settings.state.value.microphone && granted &&
             camera.state.value.thermal < PowerManager.THERMAL_STATUS_SEVERE)
     }
     fun updateSettings(block: (Settings) -> Settings) { settings.update(block); camera.applySettings() }

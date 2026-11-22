@@ -86,13 +86,13 @@ import java.util.Locale
                     if (session.running) { editRegion = false; vm.stop() }
                     else if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) vm.start()
                     else cameraPermission.launch(Manifest.permission.CAMERA)
-                }, enabled = session.running || (model.ready && !execution.busy && tts.selected.isNotBlank() && !tts.loading && !tts.speaking),
+                }, enabled = session.running || !tts.speaking,
                     modifier = Modifier.fillMaxWidth().height(58.dp), shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = if (session.running) Color(0xFF293742) else Lime,
                         contentColor = if (session.running) Color.White else Background)) {
                     Icon(if (session.running) PrimeIcons.Stop else PrimeIcons.PlayArrow, null)
                     Spacer(Modifier.width(10.dp))
-                    Text(if (session.running) "ZASTAVIT PŘEKLAD" else "SPUSTIT PŘEKLAD", fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Text(if (session.running) "ZASTAVIT" else if (session.ocrDiagnostic) "SPUSTIT TEST OCR" else "SPUSTIT PŘEKLAD", fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 }
                 Text(if (session.running) "Při zastavení se rozehraná věta dokončí." else "Bez propojení s PS5. Bez placených služeb.",
                     Modifier.fillMaxWidth().padding(top = 8.dp), color = Muted, style = MaterialTheme.typography.labelMedium,
@@ -287,7 +287,7 @@ import java.util.Locale
             }
             if (waiting >= 10 || session.retained > 0 || queue.items.size >= vm.queue.capacity) item {
                 Notice(if (queue.items.size >= vm.queue.capacity || session.retained > 0)
-                    "Fronta je plná. Nové OCR čeká na uvolnění místa; titulky z této pauzy mohou uniknout. Přijaté věty zůstávají zachované."
+                    "Fronta je plná. Příjem dalších dialogů čeká na uvolnění místa; titulky z této pauzy mohou uniknout. Přijaté věty zůstávají zachované."
                     else "Dabing zaostává za hrou. Můžete přeskočit čekající věty; rozehraná věta se dokončí.",
                     "Přeskočit čekající věty") { clearConfirm = true }
             }
@@ -329,6 +329,21 @@ import java.util.Locale
                     Icon(PrimeIcons.Tune, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Diagnostika a slovník jmen")
                 }
                 if (showDiagnostics) PanelCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Test OCR – celý obraz bez filtrů")
+                            Text("Bez výřezu, úprav kontrastu, filtru změn, slučování a překladu. Lze spustit i bez modelu a hlasu. Měňte při zastavení.", color = Muted)
+                        }
+                        Switch(session.ocrDiagnostic, vm::ocrDiagnostic, enabled = !session.running)
+                    }
+                    Text("KAMERA: ${if (!camera.active) "vypnuta" else if (camera.lastFrameAt == 0L || session.now - camera.lastFrameAt > 3000) "čeká na snímky" else "snímky přicházejí"}", color = Lime)
+                    Text("Snímků ${camera.received} · OCR analýz ${camera.analyzed} · znaků ${camera.characters}", color = Muted)
+                    Text(camera.frameInfo, color = Muted)
+                    Text("OCR: ${camera.lastError ?: camera.status}", color = if (camera.lastError != null) MaterialTheme.colorScheme.error else Muted)
+                    Text("Poslední přeskočení: ${camera.skipReason.ifBlank { "žádné" }}", color = Muted)
+                    Text("SUROVÝ TEXT: ${camera.rawText.ifBlank { "(zatím žádný text)" }}")
+                    Text("PŘEKLAD: ${if (queue.items.any { it.stage == Stage.FAILED && it.czech.isBlank() }) "chyba – fronta čeká" else model.message}", color = Muted)
+                    Text("TTS: ${tts.error ?: if (tts.speaking) "přehrává" else if (tts.selected.isNotBlank()) "připraveno" else "chybí český hlas"}", color = Muted)
                     Text("OCR ${diagnostic.ocrMs} ms · překlad ${diagnostic.translationMs} ms · příprava TTS ${diagnostic.ttsPreparationMs} ms", color = Muted)
                     Text("Zachyceno ${diagnostic.captured} · duplicity ${diagnostic.duplicates + queue.duplicates} · přehráno ${queue.spoken} · přeskočeno ${queue.skipped}", color = Muted)
                     Text("Analýzy ${diagnostic.ocrCount} · vynechané analýzy ${diagnostic.skippedFrames} · jistota ${(diagnostic.confidence * 100).roundToInt()} % (odhad)", color = Muted)
