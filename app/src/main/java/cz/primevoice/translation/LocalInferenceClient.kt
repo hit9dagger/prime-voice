@@ -5,7 +5,7 @@ import android.os.*
 import kotlinx.coroutines.*
 
 /** All connection bookkeeping is confined to Main; native work runs in the private service. */
-class LocalInferenceClient(private val context: Context) {
+class LocalInferenceClient(private val context: Context, private val onDeath: () -> Unit = {}) {
     private var remote: Messenger? = null
     private var connection: ServiceConnection? = null
     private var nextId = 0
@@ -30,9 +30,12 @@ class LocalInferenceClient(private val context: Context) {
             override fun onNullBinding(name: ComponentName) { disconnected() }
             private fun disconnected() {
                 if (connection !== this) return
-                remote = null
+                remote = null; connection = null
+                runCatching { context.unbindService(this) }
                 val error = IllegalStateException("Proces AI skončil; pokračuji v LIGHT.")
-                ready.completeExceptionally(error); pending.values.forEach { it.completeExceptionally(error) }; pending.clear()
+                val waiting = pending.values.toList(); pending.clear()
+                ready.completeExceptionally(error); waiting.forEach { it.completeExceptionally(error) }
+                onDeath()
             }
         }
         connection = conn
@@ -56,6 +59,7 @@ class LocalInferenceClient(private val context: Context) {
         remote = null
         val conn = connection; connection = null
         if (conn != null) runCatching { context.unbindService(conn) }
-        pending.values.forEach { it.completeExceptionally(IllegalStateException("AI byla uvolněna; pokračuji v LIGHT.")) }; pending.clear()
+        val waiting = pending.values.toList(); pending.clear()
+        waiting.forEach { it.completeExceptionally(IllegalStateException("AI byla uvolněna; pokračuji v LIGHT.")) }
     }
 }

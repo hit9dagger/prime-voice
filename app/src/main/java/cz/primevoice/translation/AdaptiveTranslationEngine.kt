@@ -22,7 +22,7 @@ class AdaptiveTranslationEngine(context: Context, private val scope: CoroutineSc
     val state = light.state
     val capabilities = DeviceCapabilities(context)
     val models = LocalModelStore(context)
-    private val client = LocalInferenceClient(context)
+    private val client = LocalInferenceClient(context) { fallback("Proces AI byl ukončen. Pokračuje LIGHT; fronta zůstává zachovaná.") }
     private val mutable = MutableStateFlow(ExecutionState(selected = initial, busy = true, resources = capabilities.snapshot()))
     val execution = mutable.asStateFlow()
     private var operation: Job? = null
