@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
                     verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text("PRIME VOICE", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
                     Text("AI Game Translator · ENGLISH → ČEŠTINA", color = MaterialTheme.colorScheme.onBackground)
+                    Button(onClick = { startActivity(Intent(this@MainActivity, CameraActivity::class.java)) }, modifier = Modifier.fillMaxWidth()) { Text("PRIME VOICE CAMERA · TITULKY Z TELEVIZE") }
                     Text(ui.status, color = MaterialTheme.colorScheme.primary)
                     LinearProgressIndicator(progress = { ui.level.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
                     Button(onClick = {
