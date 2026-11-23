@@ -11,7 +11,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -100,16 +99,18 @@ import java.util.Locale
             }
         }
     }) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(20.dp),
+        // This is a bounded settings page. Keep PreviewView composed while scrolling:
+        // recycling a LazyColumn camera item would dispose its effect and stop ImageAnalysis.
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            item {
+            Column {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Surface(color = Lime, shape = RoundedCornerShape(12.dp), modifier = Modifier.size(42.dp)) {
                         Icon(PrimeIcons.GraphicEq, null, Modifier.padding(8.dp), tint = Background)
                     }
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
                         Text("PRIME VOICE", style = MaterialTheme.typography.headlineSmall, letterSpacing = 1.sp)
-                        Text("CAMERA 2.0 · VAŠE HRA. ČESKÝ HLAS.", style = MaterialTheme.typography.labelSmall, color = Muted)
+                        Text("CAMERA 2.0.1 · VAŠE HRA. ČESKÝ HLAS.", style = MaterialTheme.typography.labelSmall, color = Muted)
                     }
                     IconButton(onClick = { showHelp = true }) { Icon(PrimeIcons.Info, "Nápověda", tint = Muted) }
                 }
@@ -119,7 +120,7 @@ import java.util.Locale
                     Tag(if (session.running) "PŘEKLAD BĚŽÍ" else "PŘIPRAVENO KE HŘE", Panel, Muted)
                 }
             }
-            item {
+            Column {
                 PanelCard {
                     Text("Výkon a modely", style = MaterialTheme.typography.titleLarge)
                     Text("RAM ${format(execution.resources.totalRam.toFloat() / GIB)} GiB · volná RAM ${format(execution.resources.availableRam.toFloat() / GIB)} GiB · úložiště ${format(execution.resources.freeStorage.toFloat() / GIB)} GiB volné", color = Muted, style = MaterialTheme.typography.bodySmall)
@@ -164,7 +165,7 @@ import java.util.Locale
                     if (execution.busy) TextButton(onClick = { vm.translation.cancelPreparation() }) { Text("Zrušit přípravu") }
                 }
             }
-            if (!model.ready || tts.selected.isBlank() || tts.loading) item {
+            if (!model.ready || tts.selected.isBlank() || tts.loading) Column {
                 PanelCard {
                     Text("Příprava na první hru", style = MaterialTheme.typography.titleLarge)
                     Text(model.message, color = Muted)
@@ -187,7 +188,7 @@ import java.util.Locale
                     }
                 }
             }
-            item {
+            Column {
                 SectionTitle("01", "Kamera", if (camera.active) "AKTIVNÍ" else "VYPNUTÁ")
                 Spacer(Modifier.height(12.dp))
                 key(execution.effective) {
@@ -218,7 +219,7 @@ import java.util.Locale
                         style = MaterialTheme.typography.bodyMedium)
                 }
             }
-            item {
+            Column {
                 PanelCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(PrimeIcons.Mic, null, tint = if (settings.microphone) Lime else Muted)
@@ -238,7 +239,7 @@ import java.util.Locale
                         color = Muted, style = MaterialTheme.typography.bodyMedium)
                 }
             }
-            item {
+            Column {
                 SectionTitle("02", "Český dabing")
                 Spacer(Modifier.height(12.dp))
                 PanelCard {
@@ -282,22 +283,22 @@ import java.util.Locale
                     Text(output.description, color = Muted, style = MaterialTheme.typography.bodyMedium)
                 }
             }
-            if (output.needsResume) item {
+            if (output.needsResume) Column {
                 Notice("Zvukový výstup se změnil nebo jej používá jiná aplikace. Další věty čekají.", "Pokračovat ve zvuku") { vm.output.resume() }
             }
-            if (waiting >= 10 || session.retained > 0 || queue.items.size >= vm.queue.capacity) item {
+            if (waiting >= 10 || session.retained > 0 || queue.items.size >= vm.queue.capacity) Column {
                 Notice(if (queue.items.size >= vm.queue.capacity || session.retained > 0)
                     "Fronta je plná. Příjem dalších dialogů čeká na uvolnění místa; titulky z této pauzy mohou uniknout. Přijaté věty zůstávají zachované."
                     else "Dabing zaostává za hrou. Můžete přeskočit čekající věty; rozehraná věta se dokončí.",
                     "Přeskočit čekající věty") { clearConfirm = true }
             }
-            if (queue.items.any { it.stage == Stage.FAILED }) item {
+            if (queue.items.any { it.stage == Stage.FAILED }) Column {
                 Notice(queue.items.firstOrNull { it.stage == Stage.FAILED }?.error ?: "Fronta čeká po chybě.", "Zkusit znovu", vm::retry)
             }
-            if (session.message != null) item {
+            if (session.message != null) Column {
                 Notice(session.message!!, "Rozumím") { vm.message(null) }
             }
-            item {
+            Column {
                 SectionTitle("03", "Stav překladu", if (active != null) "PŘEHRÁVÁM" else "ČEKÁM")
                 Spacer(Modifier.height(12.dp))
                 PanelCard {
@@ -324,7 +325,7 @@ import java.util.Locale
                     }
                 }
             }
-            item {
+            Column {
                 TextButton(onClick = { showDiagnostics = !showDiagnostics }) {
                     Icon(PrimeIcons.Tune, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Diagnostika a slovník jmen")
                 }

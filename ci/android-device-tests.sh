@@ -5,7 +5,12 @@ adb shell settings put secure tts_default_synth com.k2fsa.sherpa.onnx.tts.engine
 adb install -r apks/debug/app-x86_64-debug.apk
 adb install -r apks/androidTest/debug/app-debug-androidTest.apk
 adb logcat -c
-trap 'adb logcat -d -v threadtime > emulator-logcat.txt' EXIT
+finish() {
+  adb logcat -d -v threadtime > emulator-logcat.txt
+  # Show only app/test diagnostics in the job log as well as the downloadable full log.
+  grep -E 'PrimeVoiceCamera|PrimeVoiceOCR|REAL_OFFLINE_PIPELINE|TestRunner.*(failed|finished)|Camera did not start' emulator-logcat.txt | tail -120 || true
+}
+trap finish EXIT
 # Download translation data once. OCR and the external TTS APK already bundle their models.
 adb shell am instrument -w -r -e class cz.primevoice.ModelPreparationTest cz.primevoice.test/androidx.test.runner.AndroidJUnitRunner > model-preparation.txt
 cat model-preparation.txt

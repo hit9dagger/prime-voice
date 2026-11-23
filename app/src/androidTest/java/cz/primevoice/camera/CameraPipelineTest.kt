@@ -89,7 +89,21 @@ class CameraPipelineTest {
                 vm!!.ocrDiagnostic(true); vm!!.start()
             }
             val model = vm!!
-            withTimeout(40_000) { model.camera.state.first { it.received >= 10 && it.analyzed >= 3 } }
+            try {
+                withTimeout(40_000) { model.camera.state.first { it.received >= 10 && it.analyzed >= 3 } }
+            } catch (e: TimeoutCancellationException) {
+                throw AssertionError("Camera did not start: ${model.camera.state.value}; session=${model.session.value}", e)
+            }
+            // Camera remains attached and analyzing when its preview scrolls out of sight.
+            val metrics = context.resources.displayMetrics
+            repeat(5) {
+                val command = "input swipe ${metrics.widthPixels / 2} ${metrics.heightPixels * 2 / 3} ${metrics.widthPixels / 2} ${metrics.heightPixels / 4} 200"
+                automation.executeShellCommand(command).use { descriptor ->
+                    java.io.FileInputStream(descriptor.fileDescriptor).use { it.readBytes() }
+                }
+            }
+            val before = model.camera.state.value.analyzed
+            withTimeout(15_000) { model.camera.state.first { it.analyzed >= before + 3 } }
             assertTrue(model.session.value.running)
             assertNull(model.camera.state.value.lastError)
             scenario.onActivity { model.stop() }
@@ -142,13 +156,13 @@ class CameraPipelineTest {
             assertEquals("${finished.items}", 2, finished.spoken)
             assertTrue(finished.items.isEmpty())
             val translations = memory.snapshot()
+            println("REAL_OFFLINE_PIPELINE: $translations; PCM bytes=${tts.state.value.audioBytes}; voice=${tts.state.value.selected}")
             assertEquals(listOf(WEATHER, "Where is Jason?"), translations.map { it.english })
             assertTrue(translations[0].czech.lowercase().contains("počasí"))
             assertTrue(translations[0].czech.lowercase().contains("dnes"))
             assertTrue(translations[1].czech.lowercase().contains("kde"))
             assertTrue(translations[1].czech.contains("Jason"))
             assertTrue("Engine did not produce audio PCM", tts.state.value.audioBytes > 1000)
-            println("REAL_OFFLINE_PIPELINE: $translations; PCM bytes=${tts.state.value.audioBytes}; voice=${tts.state.value.selected}")
             // Unsupported/unprepared AI modes must preserve a working LIGHT fallback.
             for (mode in listOf(ExecutionMode.STANDARD, ExecutionMode.ULTRA, ExecutionMode.LIGHT)) {
                 withContext(Dispatchers.Main) { translator.select(mode) }

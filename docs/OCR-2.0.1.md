@@ -4,6 +4,8 @@
 
 Porovnány tagy `prime-voice-clean-v1.0.0` a `prime-voice-camera-v2.0.0`, soubor `CameraCaptureManager.kt`. Ve 1.0 neexistoval společný inferenční semafor. Ve 2.0 byl `gate.tryCamera()` před kontrolami `running`, `canAnalyze`, intervalu a `busy`. Následný časový/kalibrační skip zavřel ImageProxy, ale nevrátil permit. Další OCR ani ML Kit překlad už nemohl začít; Preview je samostatný CameraX use case, proto dál zobrazoval obraz. Navíc neúspěšné získání permitu nastavovalo `busy=false` bez vlastnictví aktivní OCR práce.
 
+Instrumentovaný test navíc odhalil vazbu kamery na recyklovanou položku `LazyColumn`: na malé obrazovce se PreviewView mimo viditelnou část nemusel vytvořit; po odrolování se jeho DisposableEffect zrušil a zastavil kameru. Jednorázové `view.post` také negarantovalo připojení a rozměření view. Stránka s omezeným počtem ovládacích prvků nyní používá obyčejný posuvný Column, náhled zůstává připojený i mimo viditelnou část a start čeká na attach i layout. Obnoven kompatibilní TextureView režim z 1.0.
+
 Nešlo o chybějící Latin model: `com.google.mlkit:text-recognition:16.0.1` jej bundluje v APK. Předchozí 2.0 test s Bitmap jej úspěšně spustil, ale neprošel skutečnou funkcí analyzátoru, a proto regresi nezachytil.
 
 ## Změny
@@ -28,7 +30,7 @@ Android testy používají skutečný ML Kit, žádný mock OCR/překladače/hla
 
 - „The weather is beautiful today.“ přes YUV ImageProxy → skutečný výřez → ML Kit; čtyři rotace, obě šířky OCR (960 a 1100), nerovné rowStride/pixelStride a nenulová pozice bufferu.
 - Tentýž produkční analyzátor: pozastavení, zámek držený překladačem, rychlé snímky, nesprávný formát a zotavení; každé ImageProxy uzavřeno právě jednou, překladový permit znovu dostupný.
-- Živý CameraX v Activity: více příchozích snímků a OCR úloh, zastavení příjmu při Stop. Emulovaná kamera sama o sobě nesnímá skutečnou televizi.
+- Živý CameraX v Activity: více příchozích snímků a OCR úloh i po odrolování náhledu, zastavení příjmu při Stop. Emulovaná kamera sama o sobě nesnímá skutečnou televizi.
 - Celý offline řetězec: vytvořený obraz dvou anglických replik → skutečné OCR → detektor kompletního bloku → fronta → ML Kit EN→CS → skutečný Android český TTS, neprázdné PCM a `onDone` obou vět. Kontrola pořadí, českých slov, jména a přepnutí režimů s LIGHT fallbackem.
 - Původní dvouřádkové OCR, start Activity, native engine probe a zotavení samostatného procesu AI.
 

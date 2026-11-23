@@ -1,6 +1,8 @@
 package cz.primevoice.ui
 
 import androidx.camera.view.PreviewView
+import androidx.core.view.doOnAttach
+import androidx.core.view.doOnLayout
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -29,13 +31,16 @@ import kotlin.math.*
                                        region: Region, editing: Boolean, onRegion: (Region) -> Unit) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
-    val view = remember { PreviewView(context).apply { implementationMode = PreviewView.ImplementationMode.PERFORMANCE } }
+    val view = remember { PreviewView(context).apply { implementationMode = PreviewView.ImplementationMode.COMPATIBLE } }
     var draft by remember(region) { mutableStateOf(region) }
     var origin by remember { mutableStateOf(Offset.Zero) }
     DisposableEffect(running, owner, view) {
         var attached = true
-        if (running) view.post { if (attached && view.isAttachedToWindow) manager.start(owner, view) }
-        else manager.stop()
+        if (running) view.doOnAttach {
+            view.doOnLayout {
+                if (attached && view.isAttachedToWindow && view.width > 0 && view.height > 0) manager.start(owner, view)
+            }
+        } else manager.stop()
         onDispose { attached = false; manager.stop() }
     }
     Box(Modifier.fillMaxWidth().aspectRatio(1.6f).clip(RoundedCornerShape(20.dp)).background(Color(0xFF080C11))) {

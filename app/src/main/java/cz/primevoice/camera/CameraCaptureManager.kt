@@ -81,6 +81,7 @@ class CameraCaptureManager(private val context: Context, private val scope: Coro
                     .setScaleType(ViewPort.FILL_CENTER).build()
                 val group = UseCaseGroup.Builder().setViewPort(viewport).addUseCase(pre).addUseCase(ana).build()
                 camera = p.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, group)
+                android.util.Log.i("PrimeVoiceCamera", "CameraX bound: preview ${view.width}x${view.height}, rotation $rotation")
                 preview = pre; analysis = ana
                 ana.setAnalyzer(executor) { frame -> analyze(frame, token) }
                 val info = camera!!.cameraInfo
@@ -91,8 +92,10 @@ class CameraCaptureManager(private val context: Context, private val scope: Coro
                 applySettings()
                 focus(view, view.width * .5f, view.height * .78f)
             } catch (e: Exception) {
-                running = false; mutable.update { it.copy(active = false, status = "Kameru nelze spustit") }
-                onError("Kamera: ${e.localizedMessage}")
+                val message = "Kamera: ${e.javaClass.simpleName}: ${e.localizedMessage}"
+                android.util.Log.e("PrimeVoiceCamera", message, e)
+                running = false; mutable.update { it.copy(active = false, status = "Kameru nelze spustit", lastError = message) }
+                onError(message)
             }
         }, ContextCompat.getMainExecutor(context))
     }
