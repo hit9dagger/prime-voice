@@ -1,0 +1,33 @@
+id	group	english	reference_cs
+01	arrival	The weather is beautiful today.	Dnes je krásné počasí.
+02	arrival	I told you we shouldn't have come here. Now we have to find another way out.	Říkal jsem ti, že jsme sem neměli chodit. Teď musíme najít jinou cestu ven.
+03	door	Do not open the door.	Neotvírej dveře.
+04	door	Why not? Is someone behind it?	Proč ne? Je za nimi někdo?
+05	door	Yes. Keep your voice down and follow me.	Ano. Ztiš se a pojď za mnou.
+06	jason	Jason, where are you?	Jasone, kde jsi?
+07	jason	I'm on the roof. The stairs are blocked.	Jsem na střeše. Schody jsou zablokované.
+08	jason	Stay there. I'll find another way up.	Zůstaň tam. Najdu jinou cestu nahoru.
+09	escape	We've got company. Get in the car!	Máme společnost. Nastup do auta!
+10	escape	Buckle up. This is going to be a rough ride.	Připoutej se. Tahle jízda bude divoká.
+11	escape	You call that a shortcut? We're going the wrong way!	Tomuhle říkáš zkratka? Jedeme špatným směrem!
+12	trust	I didn't say she stole the money.	Neřekl jsem, že ty peníze ukradla ona.
+13	trust	Then who did? You owe me the truth.	Tak kdo to udělal? Dlužíš mi pravdu.
+14	trust	If I knew, I'd tell you. I swear.	Kdybych to věděl, řekl bych ti to. Přísahám.
+15	combat	Watch your back!	Kryj si záda!
+16	combat	I'm out of ammo. Cover me while I reload.	Došla mi munice. Kryj mě, než přebiju.
+17	combat	Hold your fire! Those are our people.	Nestřílejte! To jsou naši.
+18	deal	The deal is off. You lied to us.	Dohoda padá. Lhal jsi nám.
+19	deal	Easy, man. We can still work this out.	Klid, kámo. Pořád se můžeme nějak dohodnout.
+20	deal	Not a chance. Get out of my sight.	Ani náhodou. Zmiz mi z očí.
+21	heist	Don't move until I give you the signal.	Nehýbej se, dokud ti nedám znamení.
+22	heist	The guards change shifts at midnight.	Stráže se střídají o půlnoci.
+23	heist	By then, we'll be long gone.	Tou dobou už budeme dávno pryč.
+24	loss	I couldn't save him. It was my fault.	Nedokázal jsem ho zachránit. Byla to moje chyba.
+25	loss	You did everything you could. Don't blame yourself.	Udělal jsi všechno, co bylo v tvých silách. Neobviňuj se.
+26	slang	You gotta be kidding me. That piece of junk won't start.	To si ze mě snad děláš srandu. Ten krám nejde nastartovat.
+27	slang	Give it another shot. We're running out of time.	Zkus to ještě jednou. Dochází nám čas.
+28	plan	Unless we cut the power, the alarm will go off.	Pokud nevypneme proud, spustí se alarm.
+29	plan	What if the backup generator kicks in?	Co když naskočí záložní generátor?
+30	plan	Then we improvise. No one gets left behind.	Pak zaimprovizujeme. Nikoho tu nenecháme.
+31	name	Lucia, tell Jason to meet us at the old warehouse.	Lucio, řekni Jasonovi, ať se s námi sejde ve starém skladišti.
+32	name	He said he'd be there, but I wouldn't count on it.	Říkal, že tam bude, ale moc bych na to nespoléhal.

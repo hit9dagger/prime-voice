@@ -43,17 +43,22 @@ object ExecutionPolicy {
         else CaptureBudget(1920, 1080, 1100, 300, 1000)
 }
 
-/** OCR and translation share one permit. Skipped camera frames are closed, never queued. */
+/** LIGHT serializes ML Kit/OCR on low-RAM phones. A single native model runs on its
+ * own two-thread process; OCR continues at reduced cadence so long inference cannot
+ * hide subsequent subtitles. Never two model generations or two OCR tasks at once. */
 class InferenceGate {
     private val permit = Semaphore(1)
+    private val nativePermit = Semaphore(1)
     private val mutable = MutableStateFlow(false)
     val heavy = mutable.asStateFlow()
     fun tryCamera() = permit.tryAcquire()
     fun releaseCamera() = permit.release()
-    suspend fun <T> run(heavy: Boolean = false, block: suspend () -> T): T = permit.withPermit {
-        mutable.value = heavy
-        try { block() } finally { mutable.value = false }
-    }
+    suspend fun <T> run(heavy: Boolean = false, block: suspend () -> T): T =
+        if (!heavy) permit.withPermit { block() }
+        else nativePermit.withPermit {
+            mutable.value = true
+            try { block() } finally { mutable.value = false }
+        }
 }
 
 object LocalTranslationChecks {

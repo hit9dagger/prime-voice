@@ -17,7 +17,7 @@ class InferenceProcessTest {
         val client = LocalInferenceClient(ApplicationProvider.getApplicationContext())
         try {
             val status = client.request(1)
-            assertTrue(status.contains("LiteRT-LM 0.16.1"))
+            assertTrue(status.contains("llama.cpp 2d8a325"))
             assertTrue(status.contains("model zatím neověřen"))
         } finally { withContext(Dispatchers.Main) { client.shutdown() } }
     }
@@ -29,7 +29,7 @@ class InferenceProcessTest {
             try { client.request(999) } catch (_: Exception) { failed = true }
             assertTrue(failed)
             delay(700) // Android must retire the deliberately failed remote process.
-            assertTrue(client.request(1).contains("LiteRT-LM"))
+            assertTrue(client.request(1).contains("llama.cpp"))
         } finally { withContext(Dispatchers.Main) { client.shutdown() } }
     }
 }

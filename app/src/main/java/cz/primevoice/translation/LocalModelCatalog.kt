@@ -3,19 +3,18 @@ package cz.primevoice.translation
 import cz.primevoice.core.ExecutionMode
 
 data class LocalModelSpec(val mode: ExecutionMode, val name: String, val fileName: String,
-    val bytes: Long, val sha256: String, val url: String?, val page: String)
+    val bytes: Long, val sha256: String, val url: String?, val page: String, val license: String)
 
-/** Exact immutable publisher revisions + LFS SHA-256, verified against the publisher's metadata. */
+/** Immutable revisions and LFS SHA-256. Text-only GGUF; no vision projector is required for OCR input. */
 object LocalModelCatalog {
-    const val standardBlockedReason = "STANDARD používá ML Kit. Kandidát Qwen3 0.6B s LiteRT-LM 0.16.1 při skutečném testu na Linuxu nevracel český překlad, proto není v této verzi povolen."
-    val standard = LocalModelSpec(ExecutionMode.STANDARD, "Qwen3 0.6B (LiteRT-LM)", "qwen3-0.6b.litertlm",
-        613722264L, "c5f39b4191926786c3e6668b62af4d6eb15248dfc7a5348252a9b406f33f2108",
-        "https://huggingface.co/litert-community/Qwen3-0.6B/resolve/8d42ab5f1db14cad987fac57aeb17d070f9e180d/Qwen3-0.6B.litertlm",
-        "https://huggingface.co/litert-community/Qwen3-0.6B")
-    // The publisher requires acceptance of Gemma terms. No mirrors, embedded credentials or bypass.
-    val ultra = LocalModelSpec(ExecutionMode.ULTRA, "Gemma 3n E2B int4 (LiteRT-LM)", "gemma-3n-e2b.litertlm",
-        3655827456L, "2ed7bc3a0026c93d5b8a4544b352d9d00cd66ff0bac3ef6a20ac3d2cba4010d6", null,
-        "https://huggingface.co/google/gemma-3n-E2B-it-litert-lm/blob/c03b6f60b8da6c5400b6838a2cf26420f80c0a01/gemma-3n-E2B-it-int4.litertlm")
+    val standard = LocalModelSpec(ExecutionMode.STANDARD, "Qwen 3 1.7B Q4_K_M", "Qwen_Qwen3-1.7B-Q4_K_M.gguf",
+        1282439584L, "72c5c3cb38fa32d5256e2fe30d03e7a64c6c79e668ad84057e3bd66e250b24fb",
+        "https://huggingface.co/bartowski/Qwen_Qwen3-1.7B-GGUF/resolve/dcb19155b962dbb6389f4691a982043a8e651022/Qwen_Qwen3-1.7B-Q4_K_M.gguf",
+        "https://huggingface.co/bartowski/Qwen_Qwen3-1.7B-GGUF", "Apache 2.0")
+    val ultra = LocalModelSpec(ExecutionMode.ULTRA, "Gemma 3 4B Instruct QAT Q4_K_M", "google_gemma-3-4b-it-qat-Q4_K_M.gguf",
+        2489894304L, "00165396c856791d12d935d8094b360c71243abd7475390d1efe4e109035b964",
+        "https://huggingface.co/bartowski/google_gemma-3-4b-it-qat-GGUF/resolve/0e3202d4c2315e5d2796d83c476e0961e4680513/google_gemma-3-4b-it-qat-Q4_K_M.gguf",
+        "https://huggingface.co/bartowski/google_gemma-3-4b-it-qat-GGUF", "Gemma Terms of Use · ai.google.dev/gemma/terms")
     fun forMode(mode: ExecutionMode) = when (mode) {
         ExecutionMode.STANDARD -> standard
         ExecutionMode.ULTRA -> ultra

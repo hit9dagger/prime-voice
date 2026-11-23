@@ -1,0 +1,33 @@
+id	group	english	reference_cs	latency_ms	peak_rss_kib	actual_cs
+01	arrival	The weather is beautiful today.	Dnes je krásné počasí.	1614	1821840	Dějiny jsou krásné dnes.
+02	arrival	I told you we shouldn't have come here. Now we have to find another way out.	Říkal jsem ti, že jsme sem neměli chodit. Teď musíme najít jinou cestu ven.	2704	1827344	Díky ti, že jste přišli sem. Teď musíme najít druhý cestu ven.
+03	door	Do not open the door.	Neotvírej dveře.	1485	1827344	Otevřete dveře.
+04	door	Why not? Is someone behind it?	Proč ne? Je za nimi někdo?	2039	1827600	Proč ne? Je někdo za ním?
+05	door	Yes. Keep your voice down and follow me.	Ano. Ztiš se a pojď za mnou.	2791	1828624	Ano. Zavoláte hlas klesavě a přijďte s mým kamarádem.
+06	jason	Jason, where are you?	Jasone, kde jsi?	1418	1828624	Ach, kde jsi?
+07	jason	I'm on the roof. The stairs are blocked.	Jsem na střeše. Schody jsou zablokované.	2030	1828624	Já na výšce. Stopy jsou zablockovány.
+08	jason	Stay there. I'll find another way up.	Zůstaň tam. Najdu jinou cestu nahoru.	2454	1828624	Dálte. Zjistím jiný cestu.
+09	escape	We've got company. Get in the car!	Máme společnost. Nastup do auta!	1832	1828624	Jádrem je zájem. Připojte se do auta!
+10	escape	Buckle up. This is going to be a rough ride.	Připoutej se. Tahle jízda bude divoká.	2206	1828624	Buckle up. Tohle bude trpělivost.
+11	escape	You call that a shortcut? We're going the wrong way!	Tomuhle říkáš zkratka? Jedeme špatným směrem!	3352	1828624	Jsi to taky způsob klesání? Chystáme se k nesprávnému směru!
+12	trust	I didn't say she stole the money.	Neřekl jsem, že ty peníze ukradla ona.	1880	1828624	Nedokázala jsem říct, že získala peníze.
+13	trust	Then who did? You owe me the truth.	Tak kdo to udělal? Dlužíš mi pravdu.	2259	1828624	Takže kdo to udělal? Dobírám si pravdu.
+14	trust	If I knew, I'd tell you. I swear.	Kdybych to věděl, řekl bych ti to. Přísahám.	3235	1828624	Pokud jsem věděl, řekl by to ti. Vždyť jsem věděl.
+15	combat	Watch your back!	Kryj si záda!	1359	1828624	Běž na záda!
+16	combat	I'm out of ammo. Cover me while I reload.	Došla mi munice. Kryj mě, než přebiju.	2563	1828624	Jsem bez zbraní. Připomeň mi, abys mě zastavil, když se přejedu.
+17	combat	Hold your fire! Those are our people.	Nestřílejte! To jsou naši.	2674	1828624	Zapomeň na zbraně! To jsou náš lid.
+18	deal	The deal is off. You lied to us.	Dohoda padá. Lhal jsi nám.	1985	1828624	Nedává se deal. Vy měly mít na mě nařík.
+19	deal	Easy, man. We can still work this out.	Klid, kámo. Pořád se můžeme nějak dohodnout.	2517	1828624	Jasně, bravo. Můžeme to dál říct.
+20	deal	Not a chance. Get out of my sight.	Ani náhodou. Zmiz mi z očí.	3079	1828624	Nemáme žádnou možnost. Odchývej se zpátky.
+21	heist	Don't move until I give you the signal.	Nehýbej se, dokud ti nedám znamení.	1622	1828624	Čekat, dokud nevyklopím signál.
+22	heist	The guards change shifts at midnight.	Stráže se střídají o půlnoci.	2361	1828624	Změní se zastávání pozic na hodinách ve spádě.
+23	heist	By then, we'll be long gone.	Tou dobou už budeme dávno pryč.	2651	1828624	Během toho budeš mít mnohem déle.
+24	loss	I couldn't save him. It was my fault.	Nedokázal jsem ho zachránit. Byla to moje chyba.	1852	1828624	Nemohl jsem ho zahynout. To byla moje chyba.
+25	loss	You did everything you could. Don't blame yourself.	Udělal jsi všechno, co bylo v tvých silách. Neobviňuj se.	2670	1828624	Dělal jsi všechno, co mohl. Neblíž se seběsudit.
+26	slang	You gotta be kidding me. That piece of junk won't start.	To si ze mě snad děláš srandu. Ten krám nejde nastartovat.	1966	1828624	Nechybací! To těžíkaček neukoncová.
+27	slang	Give it another shot. We're running out of time.	Zkus to ještě jednou. Dochází nám čas.	2385	1828624	Dělej to znovu. Můžeme to dělat.
+28	plan	Unless we cut the power, the alarm will go off.	Pokud nevypneme proud, spustí se alarm.	1899	1828624	Že nezavřiť energie, zavolá zvonek.
+29	plan	What if the backup generator kicks in?	Co když naskočí záložní generátor?	2326	1828624	Co když záloha generátoru zahájí?
+30	plan	Then we improvise. No one gets left behind.	Pak zaimprovizujeme. Nikoho tu nenecháme.	2895	1828624	Takže následuje návrh. Nenávidíme nikoho.
+31	name	Lucia, tell Jason to meet us at the old warehouse.	Lucio, řekni Jasonovi, ať se s námi sejde ve starém skladišti.	2154	1828624	Lucie, předaj si Jasonu, abychom se užívali v starém budově.
+32	name	He said he'd be there, but I wouldn't count on it.	Říkal, že tam bude, ale moc bych na to nespoléhal.	2430	1828624	Řekl, že bude tam, ale nezkoušu to.

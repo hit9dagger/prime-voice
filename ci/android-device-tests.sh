@@ -8,7 +8,7 @@ adb logcat -c
 finish() {
   adb logcat -d -v threadtime > emulator-logcat.txt
   # Show only app/test diagnostics in the job log as well as the downloadable full log.
-  grep -E 'PrimeVoiceCamera|PrimeVoiceOCR|REAL_OFFLINE_PIPELINE|TestRunner.*(failed|finished)|Camera did not start' emulator-logcat.txt | tail -120 || true
+  grep -E 'PrimeVoiceCamera|PrimeVoiceOCR|REAL_OFFLINE_PIPELINE|REAL_TRANSLATION_CORPUS|TestRunner.*(failed|finished)|Camera did not start' emulator-logcat.txt | tail -120 || true
 }
 trap finish EXIT
 # Download translation data once. OCR and the external TTS APK already bundle their models.
@@ -19,4 +19,6 @@ adb shell svc wifi disable
 adb shell svc data disable
 adb shell am instrument -w -r -e notClass cz.primevoice.ModelPreparationTest cz.primevoice.test/androidx.test.runner.AndroidJUnitRunner > emulator-results.txt
 cat emulator-results.txt
-grep -q 'OK (8 tests)' emulator-results.txt
+grep -q 'OK (10 tests)' emulator-results.txt
+
+adb pull /sdcard/Android/data/cz.primevoice/files/translation-mlkit.tsv translation-mlkit.tsv

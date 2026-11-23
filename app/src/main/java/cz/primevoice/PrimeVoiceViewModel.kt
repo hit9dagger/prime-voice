@@ -44,7 +44,7 @@ class PrimeVoiceViewModel(application: Application) : AndroidViewModel(applicati
             actualLatencyMs = active?.let { item -> SystemClock.elapsedRealtime() - item.subtitle.capturedAt } ?: it.actualLatencyMs) }
     }
     val queue: TranslationQueueManager = TranslationQueueManager(viewModelScope, translation, tts, SystemClock::elapsedRealtime,
-        translationTimeoutMs = 30_000, translationParallelism = 1)
+        translationTimeoutMs = 65_000, translationParallelism = 1)
     val asr = SpeechRecognitionProcessor(application) { fusion.add(it) }
     val camera = CameraCaptureManager(application, viewModelScope, { settings.state.value }, {
         mutable.value.running && !mutable.value.calibrating &&

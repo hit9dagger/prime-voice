@@ -1,4 +1,4 @@
-name: PRIME VOICE CAMERA 2.0.1 OCR fix APK
+name: PRIME VOICE CAMERA 2.1.0 Android validation
 on:
   push:
   pull_request:
@@ -6,12 +6,12 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: camera-2-${{ github.ref }}
+  group: camera-21-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v5
@@ -23,51 +23,27 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
-      - name: Install SDK
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
-      - name: Tests, lint, optimized APK and Android tests
-        run: ./gradlew :core:test :app:lintRelease :app:assembleRelease :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon
-      - name: Prepare verified download files
-        shell: bash
+      - name: Install SDK, NDK and CMake
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.2.12479018' 'cmake;3.22.1'
+      - name: Tests, lint, native APK and Android tests
+        run: ./gradlew :core:test :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon
+      - name: Package actual APK and reports
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-universal-release.apk dist/PRIME-VOICE-CAMERA-2.0.1.apk
-          cp app/build/outputs/apk/release/app-arm64-v8a-release.apk dist/PRIME-VOICE-CAMERA-2.0.1-arm64.apk
+          cp app/build/outputs/apk/debug/app-universal-debug.apk dist/PRIME-VOICE-CAMERA-2.1.0-debug.apk
+          cp app/build/outputs/apk/debug/app-arm64-v8a-debug.apk dist/PRIME-VOICE-CAMERA-2.1.0-arm64-debug.apk
           for apk in dist/*.apk; do
             "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
             "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 "$apk"
           done
-          git archive --format=zip --prefix=PRIME-VOICE-CAMERA/ HEAD > dist/PRIME-VOICE-CAMERA-2.0.1-zdroje.zip
-          zip -qr dist/PRIME-VOICE-CAMERA-2.0.1-testy.zip core/build/reports/tests/test app/build/reports/lint-results-release.html docs
+          git archive --format=zip --prefix=PRIME-VOICE-CAMERA/ HEAD > dist/PRIME-VOICE-CAMERA-2.1.0-zdroje.zip
+          zip -qr dist/PRIME-VOICE-CAMERA-2.1.0-testy.zip core/build/reports/tests/test app/build/reports/lint-results-debug.html docs validation
           cp README.md dist/PRIME-VOICE-CAMERA-navod.md
           (cd dist && sha256sum *.apk *.zip *.md > SHA256SUMS.txt)
-          cat > dist/release-notes.md <<'NOTES'
-          ## Instalace
-          **[Stáhnout univerzální PRIME VOICE CAMERA 2.0.1](https://github.com/hit9dagger/prime-voice/releases/download/prime-voice-camera-v2.0.1/PRIME-VOICE-CAMERA-2.0.1.apk)**
-
-          **[Menší APK pro POCO F7 Ultra a další ARM64 telefony](https://github.com/hit9dagger/prime-voice/releases/download/prime-voice-camera-v2.0.1/PRIME-VOICE-CAMERA-2.0.1-arm64.apk)**
-
-          Odkaz otevřete přímo v aplikaci Chrome. Po stažení otevřete APK a zvolte Instalovat. Pokud Android hlásí konflikt podpisu se starší testovací verzí, je nutná její odinstalace; tím se odstraní její nastavení a stažená data. Jde o optimalizované testovací APK podepsané vývojovým klíčem.
-
-          ## Oprava OCR
-          Verze 2.0 před kontrolou intervalu snímání zamkla společný OCR/překladový semafor. Při přeskočení snímku jej neuvolnila. Náhled běžel dál, OCR a překlad zůstaly zablokované. Verze 2.0.1 vlastní zámek pouze během skutečného zpracování a uvolní jej i při chybě.
-
-          - OCR lze spustit bez překladového modelu a bez hlasu. Do jejich přípravy se text pouze zobrazuje.
-          - Diagnostika: příchozí snímky, provedené OCR, znaky, surový text, rotace/formát, chyby a stavy kamery/překladu/TTS. Volitelný test celého obrazu bez filtrů.
-          - Zachována fronta, nepřerušované TTS, počáteční rezerva, ASR, LIGHT a integrace Gemma. Kontext AI se nyní aktualizuje po překladu, bez čekání na dočtení hlasem.
-          - ML Kit Latin OCR je součástí APK. Překlad EN→CS a český hlas vyžadují jednorázovou přípravu. Žádné placené API.
-
-          Publikace vyžaduje unit testy, lint, podpis/zarovnání APK a testy na Android 10 emulátoru se 4 GB RAM: živé CameraX callbacky, skutečné OCR YUV snímků ve čtyřech rotacích, obě rozlišení OCR, zotavení po chybě a celý offline řetězec skutečného OCR → ML Kit EN→CS → český Android TTS Jirka včetně generování PCM a dokončení dvou promluv. Detaily jsou v přiložených protokolech. Vstup s anglickým textem je v testu vytvořený obraz; test fyzické televize to nenahrazuje.
-
-          **POCO F7 Ultra, Bluetooth, dlouhodobý provoz a skutečná inference Gemma nejsou fyzicky ověřeny.** ML Kit nepodporuje konverzační kontext a nezaručuje správný slang. STANDARD používá ML Kit; ULTRA se aktivuje až po kontrole přesného modelu a překladovém testu na telefonu. Soubor Gemma Web není automaticky prohlášen za kompatibilní.
-
-          [Projekt a návod](https://github.com/hit9dagger/prime-voice/tree/prime-voice-camera-2.0.1) · [Příčina chyby a ověření](https://github.com/hit9dagger/prime-voice/blob/prime-voice-camera-2.0.1/docs/OCR-2.0.1.md)
-          NOTES
-          printf '\nCommit: %s\n' "$GITHUB_SHA" >> dist/release-notes.md
       - uses: actions/upload-artifact@v4
         with:
-          name: CAMERA-2-download
+          name: PRIME-VOICE-CAMERA-2.1.0-download
           path: dist/
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
@@ -83,14 +59,14 @@ jobs:
           name: unit-and-lint-reports
           path: |
             core/build/reports/tests/test/
-            app/build/reports/lint-results-release.html
+            app/build/reports/lint-results-debug.html
   android-test:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Download real Czech TTS engine for emulator only
+      - name: Real Czech TTS engine for emulator only
         run: |
           curl -fL --retry 3 'https://huggingface.co/csukuangfj2/sherpa-onnx-apk/resolve/main/tts-engine-new/2.0.2/sherpa-onnx-2.0.2-x86_64-ces-tts-engine-vits-piper-cs_CZ-jirka-low.apk' -o jirka-test.apk
           echo '667dc39f8ff22b4d81ff0d30e2e36e1fe0dd06a428d25bf94bcdb79a3a707212  jirka-test.apk' | sha256sum -c -
@@ -103,9 +79,8 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - name: Enable KVM
-        run: |
-          sudo chmod 666 /dev/kvm
-      - name: Real OCR, Activity and native-process tests on 4GB Android
+        run: sudo chmod 666 /dev/kvm
+      - name: Camera OCR, offline translation and Czech TTS on 4 GB Android
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 29
@@ -124,36 +99,4 @@ jobs:
             emulator-results.txt
             model-preparation.txt
             emulator-logcat.txt
-  publish:
-    needs: [build, android-test]
-    if: github.ref == 'refs/heads/prime-voice-camera-2.0.1' && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: CAMERA-2-download
-          path: dist
-      - uses: actions/download-artifact@v4
-        with:
-          name: android-emulator-report
-          path: dist
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: prime-voice-camera-v2.0.1
-          target_commitish: ${{ github.sha }}
-          name: PRIME VOICE CAMERA 2.0.1 – oprava OCR
-          body_path: dist/release-notes.md
-          prerelease: true
-          make_latest: false
-          fail_on_unmatched_files: true
-          files: |
-            dist/*.apk
-            dist/*.zip
-            dist/PRIME-VOICE-CAMERA-navod.md
-            dist/SHA256SUMS.txt
-            dist/emulator-results.txt
-            dist/model-preparation.txt
-            dist/emulator-logcat.txt
+            translation-mlkit.tsv

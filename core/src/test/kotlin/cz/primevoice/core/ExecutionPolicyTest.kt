@@ -59,11 +59,20 @@ class ExecutionPolicyTest {
     @Test fun translationAndOcrNeverOwnPermitTogether() = runTest {
         val gate = InferenceGate(); var finished = false
         assertTrue(gate.tryCamera())
-        val job = launch { gate.run(heavy = true) { assertFalse(gate.tryCamera()); finished = true } }
+        val job = launch { gate.run { assertFalse(gate.tryCamera()); finished = true } }
         runCurrent(); assertFalse(finished); assertFalse(gate.heavy.value)
         gate.releaseCamera(); job.join()
         assertTrue(finished); assertFalse(gate.heavy.value)
         assertTrue(gate.tryCamera()); gate.releaseCamera()
+    }
+    @Test fun nativeInferenceNeverBlocksSubtitleCaptureButSerializesHeavyRequests() = runTest {
+        val gate = InferenceGate(); var second = false
+        val first = launch { gate.run(heavy = true) { awaitCancellation() } }
+        runCurrent()
+        assertTrue(gate.tryCamera()); gate.releaseCamera()
+        val next = launch { gate.run(heavy = true) { second = true } }
+        runCurrent(); assertFalse(second)
+        first.cancelAndJoin(); next.join(); assertTrue(second)
     }
     @Test fun canceledInferenceReturnsPermitAndResetsHeavyFlag() = runTest {
         val gate = InferenceGate()

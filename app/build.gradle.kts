@@ -7,12 +7,14 @@ android {
     namespace = "cz.primevoice"
     compileSdk = 36
     buildToolsVersion = "36.0.0"
+    ndkVersion = "27.2.12479018"
+    externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
     defaultConfig {
         applicationId = "cz.primevoice"
         minSdk = 29
         targetSdk = 36
-        versionCode = 21
-        versionName = "2.0.1"
+        versionCode = 30
+        versionName = "2.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
@@ -41,11 +43,11 @@ android {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
         jniLibs.useLegacyPackaging = true // Smaller universal download; Android extracts native code on install.
     }
+    sourceSets.getByName("androidTest").assets.srcDir("../validation")
     lint { abortOnError = true }
 }
 dependencies {
     implementation(project(":core"))
-    implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.1")
     implementation(platform("androidx.compose:compose-bom:2025.08.01"))
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.compose.material3:material3")

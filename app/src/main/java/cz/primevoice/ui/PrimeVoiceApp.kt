@@ -31,6 +31,9 @@ import cz.primevoice.core.Stage
 import cz.primevoice.core.ExecutionMode
 import cz.primevoice.core.GIB
 import cz.primevoice.core.MIB
+import cz.primevoice.core.NetworkMode
+import kotlinx.coroutines.launch
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import cz.primevoice.translation.LocalModelCatalog
 import kotlin.math.roundToInt
 import java.util.Locale
@@ -43,6 +46,14 @@ import java.util.Locale
     val model by vm.translation.state.collectAsStateWithLifecycle()
     val execution by vm.translation.execution.collectAsStateWithLifecycle()
     val transfer by vm.translation.models.state.collectAsStateWithLifecycle()
+    val cloud by vm.translation.cloud.state.collectAsStateWithLifecycle()
+    val uiScope = rememberCoroutineScope()
+    var cloudForm by remember { mutableStateOf(false) }
+    var cloudModel by remember { mutableStateOf("") }
+    var cloudKey by remember { mutableStateOf("") }
+    var cloudSaving by remember { mutableStateOf(false) }
+    var downloadConfirm by remember { mutableStateOf(false) }
+    var deleteConfirm by remember { mutableStateOf(false) }
     val tts by vm.tts.state.collectAsStateWithLifecycle()
     val camera by vm.camera.state.collectAsStateWithLifecycle()
     val asr by vm.asr.state.collectAsStateWithLifecycle()
@@ -57,7 +68,7 @@ import java.util.Locale
     var showHelp by remember { mutableStateOf(false) }
     var clearConfirm by remember { mutableStateOf(false) }
     var voiceMenu by remember { mutableStateOf(false) }
-    var wifiOnly by rememberSaveable { mutableStateOf(true) }
+    val wifiOnly = settings.wifiOnly
     val importModel = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) vm.translation.prepare(wifiOnly, uri)
     }
@@ -110,13 +121,13 @@ import java.util.Locale
                     }
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
                         Text("PRIME VOICE", style = MaterialTheme.typography.headlineSmall, letterSpacing = 1.sp)
-                        Text("CAMERA 2.0.1 · VAŠE HRA. ČESKÝ HLAS.", style = MaterialTheme.typography.labelSmall, color = Muted)
+                        Text("CAMERA 2.1.0 · VAŠE HRA. ČESKÝ HLAS.", style = MaterialTheme.typography.labelSmall, color = Muted)
                     }
                     IconButton(onClick = { showHelp = true }) { Icon(PrimeIcons.Info, "Nápověda", tint = Muted) }
                 }
                 Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Tag("EN → CS", Color(0xFF273444))
-                    Tag("OFFLINE", Color(0xFF22331C), Lime)
+                    Tag(if (cloud.consent && cloud.mode != NetworkMode.OFFLINE_ONLY) "HYBRID" else "OFFLINE", Color(0xFF22331C), Lime)
                     Tag(if (session.running) "PŘEKLAD BĚŽÍ" else "PŘIPRAVENO KE HŘE", Panel, Muted)
                 }
             }
@@ -130,7 +141,8 @@ import java.util.Locale
                                 enabled = !session.running && !execution.busy, label = { Text(mode.name) })
                         }
                     }
-                    Text("Aktivní: ${execution.effective} · doporučeno: ${execution.recommended}", color = Lime)
+                    Text("Překladač: ${execution.backend}", color = Lime)
+                    Text("Lokální režim: ${execution.effective} · doporučeno: ${execution.recommended} · poslední překlad ${execution.translationMs} ms · AI PSS ${execution.aiMemoryBytes / MIB} MiB", color = Muted, style = MaterialTheme.typography.bodySmall)
                     Text(execution.message, color = Muted)
                     if (execution.selected == ExecutionMode.LIGHT) {
                         Text("Úsporný režim aplikace: 720p, OCR nejvýše 2,5× za sekundu, jedna analýza/překlad současně. Celé titulky a hlasová fronta zůstávají zachované.", color = Muted, style = MaterialTheme.typography.bodySmall)
@@ -138,32 +150,70 @@ import java.util.Locale
                         val spec = LocalModelCatalog.forMode(execution.selected)!!
                         Text("${spec.name} · ${format(spec.bytes.toFloat() / MIB)} MiB", style = MaterialTheme.typography.titleMedium)
                         Text(execution.engineStatus, color = Muted, style = MaterialTheme.typography.bodySmall)
-                        if (execution.selected == ExecutionMode.STANDARD) Text(LocalModelCatalog.standardBlockedReason, color = Muted)
-                        else if (execution.selected !in execution.verified) Text("Na tomto telefonu zatím neověřeno. Výběr sám model nezapne; do úspěšného testu překládá ML Kit.", color = Muted)
+                        if (execution.selected !in execution.verified) Text("Na tomto telefonu zatím neověřeno. Do úspěšného testu překládá ML Kit.", color = Muted)
+                        Text("Licence: ${spec.license}. Soubor GGUF; starší .litertlm ani Web varianta nejsou zaměnitelné.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = { openUrl(context, spec.page) }) { Text("Zdroj modelu a licence") }
                         if (transfer.active) {
-                            LinearProgressIndicator(progress = { (transfer.downloaded.toFloat() / transfer.total.coerceAtLeast(1)).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
-                            Text("${transfer.downloaded / MIB} / ${transfer.total / MIB} MiB · během přípravy ponechte aplikaci otevřenou", color = Muted)
+                            val fraction = (transfer.downloaded.toFloat() / transfer.total.coerceAtLeast(1)).coerceIn(0f, 1f)
+                            LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
+                            Text("${(fraction * 100).roundToInt()} % · ${transfer.downloaded / MIB} / ${transfer.total / MIB} MiB", color = Muted)
                         }
                         Text(transfer.message, color = Muted, style = MaterialTheme.typography.bodySmall)
-                        if (!execution.installed && execution.selected == ExecutionMode.STANDARD) {
+                        if (!execution.installed) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(wifiOnly, { wifiOnly = it }, enabled = !execution.busy)
+                                Checkbox(wifiOnly, { value -> vm.updateSettings { it.copy(wifiOnly = value) } }, enabled = !execution.busy)
                                 Text("Stahovat pouze přes Wi-Fi")
                             }
-                            Button(onClick = { vm.translation.prepare(wifiOnly) }, enabled = !session.running && !execution.busy && vm.translation.rejection() == null) {
-                                Text("Stáhnout model STANDARD")
+                            Text("Potřeba až ${(spec.bytes + 768 * MIB) / MIB} MiB včetně rezervy. Stažená část se při obnovení započítá. Během přenosu ponechte aplikaci otevřenou.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                            Button(onClick = { downloadConfirm = true }, enabled = !session.running && !execution.busy) {
+                                Text(if (vm.translation.models.partialBytes(spec) > 0) "Obnovit stahování" else "Stáhnout model ${execution.selected}")
                             }
-                        }
-                        if (!execution.installed && execution.selected == ExecutionMode.ULTRA) {
-                            Text("Gemma vyžaduje přijetí podmínek vydavatele na Hugging Face. Stáhněte soubor gemma-3n-E2B-it-int4.litertlm (3,66 GB), poté jej importujte. Aplikace nevyžaduje API klíč.", color = Muted)
-                            TextButton(onClick = { openUrl(context, spec.page) }) { Text("Oficiální stažení Gemma 3n E2B") }
-                            OutlinedButton(onClick = { importModel.launch(arrayOf("*/*")) }, enabled = !session.running && !execution.busy && vm.translation.rejection() == null) { Text("Importovat stažený model") }
+                            OutlinedButton(onClick = { importModel.launch(arrayOf("*/*")) }, enabled = !session.running && !execution.busy) { Text("Importovat přesný GGUF ze souborů") }
                         }
                         if (execution.installed) Button(onClick = { vm.translation.activate() },
-                            enabled = !session.running && !execution.busy && model.ready && vm.translation.rejection() == null) { Text("Ověřit a zapnout model") }
+                            enabled = !session.running && !execution.busy && model.ready) { Text("Ověřit a zapnout model") }
+                        if (execution.installed || vm.translation.models.partialBytes(spec) > 0) TextButton(onClick = { deleteConfirm = true },
+                            enabled = !session.running && !execution.busy) { Text("Odstranit model a rozpracované stažení") }
+                        vm.translation.rejection()?.let { Text(it, color = Muted, style = MaterialTheme.typography.bodySmall) }
+
                     }
-                    if (execution.busy) TextButton(onClick = { vm.translation.cancelPreparation() }) { Text("Zrušit přípravu") }
+                    if (execution.busy) TextButton(onClick = { vm.translation.cancelPreparation() }) { Text("Pozastavit přípravu") }
                 }
+            }
+            PanelCard {
+                Text("Online / offline", style = MaterialTheme.typography.titleLarge)
+                NetworkMode.entries.forEach { value ->
+                    val title = when (value) {
+                        NetworkMode.AUTOMATIC -> "Automaticky – doporučeno"
+                        NetworkMode.OFFLINE_ONLY -> "Pouze offline"
+                        NetworkMode.PREFER_ONLINE -> "Preferovat online"
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = cloud.mode == value, onClick = { vm.translation.cloud.mode(value) })
+                        Text(title)
+                    }
+                }
+                Text("Automaticky využije povolenou online službu, jinak ověřený lokální režim. Pouze offline nikdy neposílá titulky. Stažení jazykových dat je samostatná uživatelská akce.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                Text("Volitelně Google Gemini: vyžaduje váš účet, podporovaný model a API klíč. Služba může mít kvóty nebo poplatky; k používání aplikace není potřebná.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(cloud.consent, { vm.translation.cloud.consent(it) }, enabled = cloud.configured && cloud.mode != NetworkMode.OFFLINE_ONLY)
+                    Text("Povoluji odesílat titulky a poslední dvě repliky službě Google Gemini.", Modifier.weight(1f))
+                }
+                Text(cloud.status, color = Muted, style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { cloudForm = !cloudForm; cloudModel = cloud.model; cloudKey = "" }) { Text("Nastavit vlastní online službu") }
+                if (cloudForm) {
+                    OutlinedTextField(cloudModel, { cloudModel = it }, label = { Text("Identifikátor modelu Gemini") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(cloudKey, { cloudKey = it }, label = { Text("Vlastní API klíč") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Button(onClick = {
+                        cloudSaving = true
+                        uiScope.launch {
+                            try { vm.translation.cloud.configure(cloudModel.trim(), cloudKey); cloudKey = ""; cloudForm = false }
+                            catch (e: Exception) { vm.message(e.message ?: "Online nastavení nelze uložit.") }
+                            finally { cloudSaving = false }
+                        }
+                    }, enabled = !cloudSaving && cloudKey.isNotBlank()) { Text("Uložit šifrovaně do telefonu") }
+                }
+                if (cloud.configured) TextButton(onClick = { vm.translation.cloud.remove(); cloudKey = "" }) { Text("Odstranit online klíč") }
             }
             if (!model.ready || tts.selected.isBlank() || tts.loading) Column {
                 PanelCard {
@@ -171,7 +221,7 @@ import java.util.Locale
                     Text(model.message, color = Muted)
                     if (!model.ready) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(wifiOnly, { wifiOnly = it }, enabled = !model.downloading)
+                            Checkbox(wifiOnly, { value -> vm.updateSettings { it.copy(wifiOnly = value) } }, enabled = !model.downloading)
                             Text("Stahovat pouze přes Wi-Fi", style = MaterialTheme.typography.bodyMedium)
                         }
                         Button(onClick = { vm.download(wifiOnly) }, enabled = !model.downloading, modifier = Modifier.fillMaxWidth()) {
@@ -363,6 +413,16 @@ import java.util.Locale
         text = { Text("Přeskočí se $waiting nepřehraných vět. Právě přehrávaná věta zůstane nedotčená.") },
         confirmButton = { TextButton(onClick = { vm.skipWaiting(); clearConfirm = false }) { Text("Přeskočit čekající") } },
         dismissButton = { TextButton(onClick = { clearConfirm = false }) { Text("Zachovat frontu") } })
+    if (downloadConfirm) AlertDialog(onDismissRequest = { downloadConfirm = false },
+        title = { Text("Stáhnout model ${execution.selected}?") },
+        text = { val spec = LocalModelCatalog.forMode(execution.selected)!!
+            Text("${spec.name}\n${spec.bytes / MIB} MiB. Licence: ${spec.license}.\n${if (wifiOnly) "Pouze Wi-Fi." else "Povolena i mobilní data; operátor je může účtovat."} Model se zapne až po úspěšném testu.") },
+        confirmButton = { TextButton(onClick = { downloadConfirm = false; vm.translation.prepare(wifiOnly) }) { Text("Souhlasím s licencí a stáhnout") } },
+        dismissButton = { TextButton(onClick = { downloadConfirm = false }) { Text("Zpět") } })
+    if (deleteConfirm) AlertDialog(onDismissRequest = { deleteConfirm = false }, title = { Text("Odstranit vybraný model?") },
+        text = { Text("Odstraní se pouze model ${execution.selected} a jeho rozpracované stažení v aplikaci. LIGHT zůstane k dispozici.") },
+        confirmButton = { TextButton(onClick = { deleteConfirm = false; vm.translation.deleteSelected() }) { Text("Odstranit") } },
+        dismissButton = { TextButton(onClick = { deleteConfirm = false }) { Text("Zpět") } })
     if (showHelp) AlertDialog(onDismissRequest = { showHelp = false }, title = { Text("Připraveno na vaši hru") },
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("1. Před první hrou stáhněte překladový model a český offline hlas.\n\n2. Na televizi zapněte anglické titulky. Telefon opřete nebo upevněte před obrazovku.\n\n3. Spusťte překlad a označte oblast všech řádků titulků. Klepnutím zaostříte.\n\n4. Vyberte hlas a počáteční rezervu před další relací. Bluetooth nastavte běžně v Androidu.")

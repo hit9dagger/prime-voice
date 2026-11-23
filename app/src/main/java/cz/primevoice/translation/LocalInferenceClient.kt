@@ -8,9 +8,12 @@ import kotlinx.coroutines.*
 class LocalInferenceClient(private val context: Context, private val onDeath: () -> Unit = {}) {
     private var remote: Messenger? = null
     private var connection: ServiceConnection? = null
+    @Volatile var memoryBytes: Long = 0
+        private set
     private var nextId = 0
     private val pending = mutableMapOf<Int, CompletableDeferred<String>>()
     private val receiver = Messenger(Handler(Looper.getMainLooper()) { message ->
+        memoryBytes = message.data.getLong("pssBytes", 0)
         val deferred = pending.remove(message.arg1)
         val error = message.data.getString("error")
         if (error != null) deferred?.completeExceptionally(IllegalStateException(error))
@@ -56,7 +59,7 @@ class LocalInferenceClient(private val context: Context, private val onDeath: ()
     fun shutdown() {
         check(Looper.myLooper() == Looper.getMainLooper())
         runCatching { remote?.send(Message.obtain(null, InferenceProtocol.STOP)) }
-        remote = null
+        remote = null; memoryBytes = 0
         val conn = connection; connection = null
         if (conn != null) runCatching { context.unbindService(conn) }
         val waiting = pending.values.toList(); pending.clear()

@@ -5,98 +5,87 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.StatFs
-import cz.primevoice.core.MIB
+import cz.primevoice.core.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
-import java.io.InputStream
-import java.net.HttpURLConnection
-import java.net.URL
-import java.security.MessageDigest
 
 data class ModelTransfer(val active: Boolean = false, val downloaded: Long = 0, val total: Long = 0,
     val message: String = "Velké modely nejsou součástí APK.")
 
 class LocalModelStore(private val context: Context) {
-    private val directory = File(context.noBackupFilesDir, "language_models").apply {
-        mkdirs(); listFiles()?.filter { it.name.endsWith(".part") }?.forEach { it.delete() }
-    }
+    private val directory = File(context.noBackupFilesDir, "language_models").apply { mkdirs() }
+    private val lock = Mutex()
+    private val downloader = ResumableModelDownload()
     private val mutable = MutableStateFlow(ModelTransfer())
     val state = mutable.asStateFlow()
     fun file(spec: LocalModelSpec) = File(directory, spec.fileName)
+    private fun part(spec: LocalModelSpec) = File(directory, spec.fileName + ".part")
     fun installed(spec: LocalModelSpec) = file(spec).length() == spec.bytes
-    suspend fun verify(spec: LocalModelSpec): Boolean = withContext(Dispatchers.IO) {
-        val source = file(spec)
-        if (!installed(spec)) return@withContext false
-        val digest = MessageDigest.getInstance("SHA-256")
-        source.inputStream().use { input ->
-            val bytes = ByteArray(128 * 1024)
-            while (true) {
-                ensureActive(); val n = input.read(bytes); if (n < 0) break
-                digest.update(bytes, 0, n)
-            }
+    fun partialBytes(spec: LocalModelSpec) = part(spec).length()
+    suspend fun verify(spec: LocalModelSpec) = verifyFile(file(spec), spec.bytes, spec.sha256)
+    fun pause() = downloader.disconnect()
+    suspend fun delete(spec: LocalModelSpec) = withContext(Dispatchers.IO) {
+        lock.withLock {
+            check(!file(spec).exists() || file(spec).delete()) { "Model nelze odstranit." }
+            check(!part(spec).exists() || part(spec).delete()) { "Rozpracovaný model nelze odstranit." }
+            mutable.value = ModelTransfer(message = "Model byl odstraněn. LIGHT zůstává dostupný.")
         }
-        digest.digest().joinToString("") { "%02x".format(it) } == spec.sha256
     }
     suspend fun download(spec: LocalModelSpec, wifiOnly: Boolean) = withContext(Dispatchers.IO) {
-        requireNotNull(spec.url) { "Tento model stáhněte od vydavatele a importujte." }
-        checkNetwork(wifiOnly)
-        transfer(spec) {
-            val connection = URL(spec.url).openConnection() as HttpURLConnection
-            connection.connectTimeout = 20_000; connection.readTimeout = 20_000
-            connection.instanceFollowRedirects = true
-            try {
-                check(connection.responseCode == 200) { "Stažení modelu: HTTP ${connection.responseCode}" }
-                connection.inputStream.use { input -> copyVerified(spec, input) { checkNetwork(wifiOnly) } }
-            } finally { connection.disconnect() }
+        transfer(spec, resume = true) {
+            downloader.download(requireNotNull(spec.url), part(spec), file(spec), spec.bytes, spec.sha256,
+                beforeChunk = {
+                    checkNetwork(wifiOnly)
+                    check(StatFs(directory.path).availableBytes > 256 * MIB) { "Úložiště se zaplnilo. Stahování pozastaveno." }
+                }, progress = { bytes -> mutable.update { it.copy(downloaded = bytes,
+                    message = if (bytes == spec.bytes) "Ověřuji SHA-256 celého modelu…" else "Stahuji ${spec.name}…") } })
         }
     }
     suspend fun import(spec: LocalModelSpec, uri: Uri) = withContext(Dispatchers.IO) {
-        transfer(spec) {
-            context.contentResolver.openInputStream(uri)?.use { copyVerified(spec, it) {} }
-                ?: error("Soubor nelze otevřít.")
+        transfer(spec, resume = false) {
+            // Imports use a separate temporary file so a failed SAF selection does not destroy a resumable download.
+            val temp = File(directory, spec.fileName + ".import")
+            try {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    temp.outputStream().buffered().use { output ->
+                        val buffer = ByteArray(128 * 1024); var total = 0L; var reported = 0L
+                        while (true) {
+                            ensureActive(); val n = input.read(buffer); if (n < 0) break
+                            total += n; check(total <= spec.bytes) { "Vybraný soubor neodpovídá modelu ${spec.name}." }
+                            output.write(buffer, 0, n)
+                            if (total - reported >= MIB) {
+                                reported = total; mutable.update { it.copy(downloaded = total) }
+                                check(StatFs(directory.path).availableBytes > 256 * MIB) { "Úložiště se zaplnilo." }
+                            }
+                        }
+                    }
+                } ?: error("Soubor nelze otevřít.")
+                mutable.update { it.copy(message = "Ověřuji SHA-256 importovaného modelu…") }
+                check(verifyFile(temp, spec.bytes, spec.sha256)) { "Nesouhlasí velikost nebo SHA-256. Vyberte přesnou GGUF variantu uvedenou v aplikaci." }
+                check(temp.renameTo(file(spec))) { "Model nelze uložit." }
+                part(spec).delete()
+            } finally { temp.delete() }
         }
     }
-    private suspend fun transfer(spec: LocalModelSpec, block: suspend () -> Unit) {
-        check(!mutable.value.active) { "Jiné stahování již běží." }
-        check(StatFs(directory.path).availableBytes >= spec.bytes + 768 * MIB) { "Pro model a rezervu není dost místa." }
-        mutable.value = ModelTransfer(true, 0, spec.bytes, "Připravuji ${spec.name}…")
-        try {
-            block()
-            mutable.value = ModelTransfer(message = "Soubor ověřen. Nyní spusťte test kompatibility a překladu.")
-        } catch (e: CancellationException) {
-            mutable.value = ModelTransfer(message = "Příprava zrušena. Neúplný soubor byl odstraněn."); throw e
-        } catch (e: Exception) {
-            mutable.value = ModelTransfer(message = e.message ?: "Příprava modelu selhala."); throw e
-        } finally { File(directory, spec.fileName + ".part").delete() }
-    }
-    private suspend fun copyVerified(spec: LocalModelSpec, input: InputStream, checkConnection: () -> Unit) {
-        val part = File(directory, spec.fileName + ".part")
-        val digest = MessageDigest.getInstance("SHA-256")
-        var total = 0L; var reported = 0L
-        part.outputStream().buffered().use { output ->
-            val buffer = ByteArray(128 * 1024)
-            while (true) {
-                currentCoroutineContext().ensureActive()
-                val n = input.read(buffer); if (n < 0) break
-                total += n; check(total <= spec.bytes) { "Soubor neodpovídá zvolenému modelu." }
-                digest.update(buffer, 0, n); output.write(buffer, 0, n)
-                if (total - reported >= MIB) {
-                    checkConnection(); reported = total
-                    mutable.value = mutable.value.copy(downloaded = total)
-                    check(StatFs(directory.path).availableBytes > 256 * MIB) { "Úložiště se zaplnilo." }
-                }
-            }
+    private suspend fun transfer(spec: LocalModelSpec, resume: Boolean, block: suspend () -> Unit) = lock.withLock {
+        val offset = if (resume) partialBytes(spec).coerceAtMost(spec.bytes) else 0
+        check(StatFs(directory.path).availableBytes >= spec.bytes - offset + 768 * MIB) {
+            "Je potřeba ještě ${(spec.bytes - offset + 768 * MIB) / MIB} MiB volného místa včetně rezervy."
         }
-        check(total == spec.bytes && digest.digest().joinToString("") { "%02x".format(it) } == spec.sha256) {
-            "Nesouhlasí velikost nebo SHA-256. Vyberte přesný model uvedený v aplikaci; soubor nebyl aktivován."
-        }
-        check(part.renameTo(file(spec))) { "Ověřený model nelze uložit." }
+        mutable.value = ModelTransfer(true, offset, spec.bytes, "Připravuji ${spec.name}…")
+        try { block(); mutable.update { it.copy(message = "Soubor ověřen. Nyní spusťte test kompatibility a překladu.") } }
+        catch (e: CancellationException) {
+            mutable.update { it.copy(message = "Příprava pozastavena. Stažená data zůstala zachována; lze pokračovat.") }; throw e
+        } catch (e: Exception) { mutable.update { it.copy(message = e.message ?: "Příprava modelu selhala.") }; throw e }
+        finally { mutable.update { it.copy(active = false) } }
     }
     private fun checkNetwork(wifiOnly: Boolean) {
         val manager = context.getSystemService(ConnectivityManager::class.java)
         val caps = manager.getNetworkCapabilities(manager.activeNetwork)
-        check(caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true) { "Chybí připojení k internetu." }
-        check(!wifiOnly || caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) { "Příprava vyžaduje Wi-Fi. Zapněte ji nebo zrušte omezení Wi-Fi." }
+        check(caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true) { "Chybí internet. Po připojení obnovte stahování." }
+        check(!wifiOnly || caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) { "Stahování čeká na Wi-Fi. Mobilní data lze povolit v nastavení." }
     }
 }

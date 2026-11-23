@@ -116,6 +116,7 @@ class CameraCaptureManager(private val context: Context, private val scope: Coro
             thermal >= PowerManager.THERMAL_STATUS_CRITICAL -> Long.MAX_VALUE
             thermal >= PowerManager.THERMAL_STATUS_SEVERE -> 1100L
             thermal >= PowerManager.THERMAL_STATUS_MODERATE -> 550L
+            gate.heavy.value -> maxOf(650L, limit.intervalMs)
             else -> limit.intervalMs
         }
         mutable.update { it.copy(received = it.received + 1, lastFrameAt = now) }
