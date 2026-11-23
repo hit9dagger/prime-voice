@@ -1,0 +1,49 @@
+name: Real GGUF translation comparison
+on:
+  push:
+    paths:
+      - '.github/workflows/model-validation.yml'
+      - 'tools/benchmark/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  benchmark:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: qwen35-2b
+            url: https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/f6d5376be1edb4d416d56da11e5397a961aca8ae/Qwen3.5-2B-Q4_K_M.gguf
+            sha: aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223
+          - name: gemma3-1b
+            url: https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/resolve/116f76234503685a98f572982177b11d44ec8ff1/google_gemma-3-1b-it-Q4_K_M.gguf
+            sha: 12bf0fff8815d5f73a3c9b586bd8fee8e7b248c935de70dec367679873d0f29d
+          - name: gemma3-4b
+            url: https://huggingface.co/bartowski/google_gemma-3-4b-it-qat-GGUF/resolve/0e3202d4c2315e5d2796d83c476e0961e4680513/google_gemma-3-4b-it-qat-Q4_K_M.gguf
+            sha: 00165396c856791d12d935d8094b360c71243abd7475390d1efe4e109035b964
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build exact native translation implementation used by Android
+        run: cmake -S app/src/main/cpp -B native-build -DCMAKE_BUILD_TYPE=Release && cmake --build native-build -j2
+      - name: Download and verify research model
+        run: |
+          curl -fL --retry 3 '${{ matrix.url }}' -o model.gguf
+          echo '${{ matrix.sha }}  model.gguf' | sha256sum -c -
+      - name: Actual inference on 32 dialogues, not a simulated score
+        run: |
+          uname -a > hardware.txt
+          lscpu >> hardware.txt
+          free -m >> hardware.txt
+          native-build/prime-benchmark model.gguf validation/dialogues.tsv '${{ matrix.name }}-linux.tsv' > native-log.txt 2>&1
+          cat '${{ matrix.name }}-linux.tsv'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: actual-${{ matrix.name }}-translations
+          path: |
+            *-linux.tsv
+            native-log.txt
+            hardware.txt

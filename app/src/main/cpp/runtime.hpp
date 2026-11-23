@@ -50,7 +50,7 @@ public:
         // the assistant prefix, so generation is solely the user-visible translation.
         char architecture[64] = {};
         llama_model_meta_val_str(model, "general.architecture", architecture, sizeof(architecture));
-        if (std::string(architecture) == "qwen3") {
+        if ((std::string(architecture) == "qwen3" || std::string(architecture) == "qwen35")) {
             const std::string prefix = "<think>\n\n</think>\n\n";
             formatted.resize(n + prefix.size());
             std::copy(prefix.begin(), prefix.end(), formatted.begin() + n);
